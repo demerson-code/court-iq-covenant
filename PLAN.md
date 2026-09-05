@@ -792,6 +792,13 @@ Derek reviewed the preview and asked for four changes. All built and verified:
 - [x] **Lineup tab rebuilt around one court.** One rotation at a time, big chips with full names, rotation dots + Rotate, a score card (rotation strength, Overall + six categories averaged over the six on the floor with weakest/strongest flagged, lineup Worst/Average/Best), bench beside it with drag-drop onto any zone → pin → regenerate → scores update. The six-card grid (with planned subs) moved under a collapsed "All six rotations"; the breakdown panel is gone (its content is the score card).
 - [x] **Bench tab hidden.** Off the nav by default; "Show Bench tab (live sub tracker)" under Advanced brings it back. Nothing deleted.
 
+## Round 3 — coach-side feedback (2026-09-05)
+
+- [x] **Bench is a real drag source.** Big cards (60px+, grip handle, name, position, AVG pill) in the side column, which now scrolls on its own if the bench runs long.
+- [x] **Middle = main hitter, Outside = second hitter.** Picker order at MS is Setter, Middle — main hitter, Outside — second hitter, Libero; chips say Outside / Middle. Optimizer unchanged: at MS the blocking scale already makes hitting the dominant middle skill.
+- [x] **Jersey # hidden by default.** `settings.v = 2`; saves without `v` get `showJersey` flipped off once. Advanced toggle still turns it on.
+- [x] **AVG on every big-court chip** (bottom-right). Pin marker moved to the top-right so it no longer covers the zone number.
+
 ## Parallel Execution Map
 
 ```

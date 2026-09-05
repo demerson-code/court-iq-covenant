@@ -1687,10 +1687,11 @@ body.dragging-court .bench-drop-zone { display: block; }
 .rot-zone-override::before {
   content: '📌';
   position: absolute;
-  top: 2px;
-  left: 2px;
-  font-size: 10px;
+  top: 4px;
+  right: 6px;
+  font-size: 11px;
 }
+.rot-zone-override.rot-zone-server::before { right: 52px; }
 .rot-chip {
   background: var(--card);
   border: 1px solid var(--border);
@@ -2466,4 +2467,53 @@ body.dragging-court .bench-drop-zone { display: block; }
   .court-view { grid-template-columns: minmax(0, 1fr) 340px; }
   .big-rot-court .rot-zone { min-height: 140px; }
   .big-rot-court .rot-chip-name { font-size: 20px; }
+}
+
+/* ===== Round 3: bigger bench, AVG on court chips ===== */
+.court-view-side .bench-card { padding: 14px 16px; }
+.bench-hint { font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text-mute); margin-left: 6px; }
+.court-view-side .bench-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.court-view-side .bench-list .bench-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 10px 12px 10px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.court-view-side .bench-list .bench-item:active { cursor: grabbing; transform: scale(0.99); }
+.bench-grip { color: var(--text-mute); font-size: 16px; letter-spacing: -3px; opacity: 0.7; padding: 0 2px; }
+.bench-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.court-view-side .bench-name { font-size: 17px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bench-role { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-mute); }
+.court-view-side .bench-stat-pill { font-size: 15px; font-weight: 800; padding: 6px 10px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-text); }
+.bench-empty { font-size: 13px; color: var(--text-mute); padding: 8px 2px; }
+.rot-chip { position: relative; }
+.rot-chip-avg {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--brand-text);
+  background: var(--brand-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+.big-rot-court .rot-chip { padding-right: 56px; }
+@media (min-width: 768px) {
+  .court-view-side { max-height: calc(100vh - 176px); overflow-y: auto; padding-right: 2px; }
+}
+@media (min-width: 1024px) {
+  .court-view { grid-template-columns: minmax(0, 1fr) 380px; }
+  .court-view-side .bench-name { font-size: 18px; }
 }

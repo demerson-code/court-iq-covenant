@@ -25,8 +25,11 @@
 /* ===== Constants ===== */
 const ROLES = ['OH', 'MB', 'S', 'OPP', 'L', 'DS'];
 // MS shows the plain names; HS shows the fuller ones. Keys never change.
-const ROLE_LABELS = { ANY: 'All-around', OH: 'Hitter', MB: 'Middle', S: 'Setter', OPP: 'Right Side', L: 'Libero', DS: 'Defensive Specialist' };
+const ROLE_LABELS = { ANY: 'All-around', OH: 'Outside', MB: 'Middle', S: 'Setter', OPP: 'Right Side', L: 'Libero', DS: 'Defensive Specialist' };
 const ROLE_LABELS_HS = { ...ROLE_LABELS, OH: 'Outside Hitter', MB: 'Middle Blocker' };
+// In Covenant's 4-2 the middle is the main hitter and the outside the second
+// hitter — the picker says so in words, and lists them in that order.
+const ROLE_PICKER_LABELS_MS = { MB: 'Middle — main hitter', OH: 'Outside — second hitter' };
 function roleLabel(r) { return (isHS() ? ROLE_LABELS_HS : ROLE_LABELS)[r] || r; }
 // 'ANY' = no position yet (coaches are still working it out). Not in ROLES:
 // it's never a lineup slot, and the optimizer treats her as eligible for
@@ -88,7 +91,7 @@ const LEVELS = {
     roleStrict: false,       // never reject a roster for lacking a role
     blockingScale: 0.35,     // blocking rarely decides MS points; tall girls still get credit
     leadThreshold: 5,        // "winning enough" to start subbing — coach adjusts
-    roles: ['S', 'OH', 'MB', 'L'],
+    roles: ['S', 'MB', 'OH', 'L'],
     systems: ['4-2', 'simple', '5-1']
   },
   hs: {
@@ -100,7 +103,7 @@ const LEVELS = {
     roleStrict: true,        // HS coaches assign positions; validation messages are useful here
     blockingScale: 1,
     leadThreshold: 5,
-    roles: ['S', 'OH', 'MB', 'OPP', 'L', 'DS'],
+    roles: ['S', 'MB', 'OH', 'OPP', 'L', 'DS'],
     systems: ['4-2', 'simple', '5-1', '6-2']
   }
 };
@@ -162,9 +165,10 @@ function defaultSettings() {
     level: 'ms',
     levelOverrides: {},          // { subsPerSet?, leadThreshold?, liberoMayServe? }
     system: '4-2',
-    showJersey: true,
+    showJersey: false,           // confusing at this stage — coach can turn it on under Advanced
     showSetterTempo: false,
-    showBench: false             // live sub tracker tab; off until a coach asks for it
+    showBench: false,            // live sub tracker tab; off until a coach asks for it
+    v: 2                         // settings shape version; bump when a default flips
   };
 }
 
@@ -513,6 +517,7 @@ function applyLoadedState(data) {
   }
   if (data.settings && typeof data.settings === 'object') {
     const { ruleset: _legacyRuleset, ...incoming } = data.settings;
+    if (!incoming.v) incoming.showJersey = false; // pre-v2 saves defaulted jersey ON; flip once
     S.settings = {
       ...defaultSettings(),
       ...incoming,
@@ -2698,7 +2703,7 @@ function positionChoices(p) {
 function positionOptionText(r) {
   if (r === 'ANY') return 'All-around — no position yet';
   // The role code (OH, MB) is jargon at MS; HS coaches use it.
-  return isHS() ? `${r} — ${roleLabel(r)}` : roleLabel(r);
+  return isHS() ? `${r} — ${roleLabel(r)}` : (ROLE_PICKER_LABELS_MS[r] || roleLabel(r));
 }
 
 function refreshSetterTempoRow(p) {
@@ -3061,7 +3066,8 @@ function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false) 
     }
   }, [
     el('span', { cls: 'rot-chip-name', text: chipName }),
-    el('span', { cls: 'rot-chip-role', text: isSub ? 'SUB' : roleLabel(role) })
+    el('span', { cls: 'rot-chip-role', text: isSub ? 'SUB' : roleLabel(role) }),
+    fullName ? el('span', { cls: 'rot-chip-avg', text: avgSkillDisplay(player), title: 'Average of the six skills' }) : null
   ]);
   return chip;
 }
@@ -3506,16 +3512,20 @@ function renderBench() {
   const sorted = sortByMode(benchPlayers, S.benchSort, item => item.player.name, item => item.skill);
   sorted.forEach(({ player, skill }) => {
     const role = (player.positions && player.positions[0]) || '';
-    const name = el('span', { cls: 'bench-name', text: player.name || '?' });
-    const tag = el('span', { cls: 'bench-role-tag', text: roleCode(role) });
-    const pill = el('span', { cls: 'bench-stat-pill', text: skill.toFixed(1) });
-    const stats = el('span', { cls: 'bench-stats' }, [tag, pill]);
     const li = el('li', {
-      attrs: { title: 'Drag onto a court zone to pin this player there' },
+      cls: `bench-item rot-chip-${role || 'ANY'}`,
+      attrs: { title: 'Drag onto a court spot to put her there' },
       on: {
         pointerdown: e => onDragStart({ kind: 'bench', playerId: player.id }, e)
       }
-    }, [name, stats]);
+    }, [
+      el('span', { cls: 'bench-grip', text: '⋮⋮', attrs: { 'aria-hidden': 'true' } }),
+      el('span', { cls: 'bench-main' }, [
+        el('span', { cls: 'bench-name', text: player.name || '?' }),
+        el('span', { cls: 'bench-role', text: roleLabel(role) })
+      ]),
+      el('span', { cls: 'bench-stat-pill', text: skill.toFixed(1), title: 'Average of the six skills' })
+    ]);
     ul.appendChild(li);
   });
 }
