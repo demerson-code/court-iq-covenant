@@ -17,7 +17,7 @@
   <header class="topbar">
     <div class="topbar-row">
       <div class="brand-row">
-        <span class="ball">🏐</span>
+        <img class="brand-logo" src="assets/covenant-logo.svg" alt="" width="32" height="32">
         <h1 class="brand">Court IQ — <span
           class="brand-team-name"
           id="teamNameDisplay"
@@ -119,67 +119,70 @@
         <div id="lineupResult" hidden>
           <div id="rotationGrid" class="rotation-grid"></div>
 
-          <details class="lb-panel" id="liberoPanel">
-            <summary>Libero config</summary>
-            <div class="lb-panel-body" id="liberoPanelBody"></div>
-          </details>
-
-          <details class="lb-panel" id="subPatternsPanel">
-            <summary>Sub patterns <span class="lb-counter" id="subsCounter"></span></summary>
-            <div class="lb-panel-body" id="subPatternsBody"></div>
-          </details>
-
-          <details class="lb-panel" id="pairingsPanel" data-hs-only>
-            <summary>Pairings <span class="lb-counter" id="pairingsCounter"></span></summary>
-            <div class="lb-panel-body" id="pairingsBody"></div>
-          </details>
-
           <details class="lb-panel" id="lineupBreakdownPanel" open>
             <summary>Lineup breakdown</summary>
             <div class="lb-panel-body" id="lineupBreakdown"></div>
           </details>
 
-          <details class="lb-panel" id="advancedPanel">
-            <summary>Advanced</summary>
-            <div class="lb-panel-body adv-body">
-              <div class="adv-grid">
-                <label class="adv-row"><span>Subs per set</span><input type="number" id="advSubsPerSet" min="6" max="30" inputmode="numeric"></label>
-                <label class="adv-row"><span>Sub in when we're up by</span><input type="number" id="advLeadThreshold" min="0" max="15" inputmode="numeric"></label>
+          <aside id="lineupSide">
+            <div class="bench-card lb-bench" id="benchCard">
+              <div class="bench-card-head">
+                <h3>Bench (drag onto a zone to pin)</h3>
+                <select class="sort-select" id="benchSort" aria-label="Sort bench">
+                  <option value="avg-desc">AVG: high → low</option>
+                  <option value="avg-asc">AVG: low → high</option>
+                  <option value="name-asc">Name: A → Z</option>
+                  <option value="name-desc">Name: Z → A</option>
+                </select>
               </div>
-              <div class="adv-toggles">
-                <label class="settings-toggle"><input type="checkbox" id="advLiberoServe"> Libero may serve</label>
-                <label class="settings-toggle"><input type="checkbox" id="jerseyToggle"> Show jersey #</label>
-                <label class="settings-toggle" data-hs-only><input type="checkbox" id="setterTempoToggle"> Setter tempo</label>
-              </div>
-              <div data-hs-only>
-                <label class="lc-field"><span>Optimize for</span>
-                  <select id="optimizationMode">
-                    <option value="balanced">Balanced — all 6 rotations</option>
-                    <option value="best6">Best 6 on floor</option>
-                    <option value="sr">Best serve-receive</option>
-                    <option value="serving">Best serving</option>
-                  </select>
-                </label>
-              </div>
-              <h4 class="label-with-help adv-subhead">Skill weights <button class="help-btn" data-help="skills-key" aria-label="What do these skills mean?" type="button">?</button></h4>
-              <p class="hint">How much each skill matters on our team (1 = not much, 10 = critical).</p>
-              <div class="weight-list" id="weightList"></div>
-              <button class="btn btn-secondary btn-tiny" id="resetWeightsBtn" type="button">Reset weights</button>
+              <ul class="bench-list" id="benchList"></ul>
             </div>
-          </details>
 
-          <div class="bench-card lb-bench" id="benchCard">
-            <div class="bench-card-head">
-              <h3>Bench (drag onto a zone to pin)</h3>
-              <select class="sort-select" id="benchSort" aria-label="Sort bench">
-                <option value="avg-desc">AVG: high → low</option>
-                <option value="avg-asc">AVG: low → high</option>
-                <option value="name-asc">Name: A → Z</option>
-                <option value="name-desc">Name: Z → A</option>
-              </select>
-            </div>
-            <ul class="bench-list" id="benchList"></ul>
-          </div>
+            <details class="lb-panel" id="liberoPanel">
+              <summary>Libero</summary>
+              <div class="lb-panel-body" id="liberoPanelBody"></div>
+            </details>
+
+            <details class="lb-panel" id="subPatternsPanel">
+              <summary>Sub patterns <span class="lb-counter" id="subsCounter"></span></summary>
+              <div class="lb-panel-body" id="subPatternsBody"></div>
+            </details>
+
+            <details class="lb-panel" id="pairingsPanel" data-hs-only>
+              <summary>Pairings <span class="lb-counter" id="pairingsCounter"></span></summary>
+              <div class="lb-panel-body" id="pairingsBody"></div>
+            </details>
+
+          <details class="lb-panel" id="advancedPanel">
+              <summary>Advanced</summary>
+              <div class="lb-panel-body adv-body">
+                <div class="adv-grid">
+                  <label class="adv-row"><span>Subs per set</span><input type="number" id="advSubsPerSet" min="6" max="30" inputmode="numeric"></label>
+                  <label class="adv-row"><span>Sub in when we're up by</span><input type="number" id="advLeadThreshold" min="0" max="15" inputmode="numeric"></label>
+                </div>
+                <div class="adv-toggles">
+                  <label class="settings-toggle"><input type="checkbox" id="advLiberoServe"> Libero may serve</label>
+                  <label class="settings-toggle"><input type="checkbox" id="jerseyToggle"> Show jersey #</label>
+                  <label class="settings-toggle" data-hs-only><input type="checkbox" id="setterTempoToggle"> Setter tempo</label>
+                </div>
+                <div data-hs-only>
+                  <label class="lc-field"><span>Optimize for</span>
+                    <select id="optimizationMode">
+                      <option value="balanced">Balanced — all 6 rotations</option>
+                      <option value="best6">Best 6 on floor</option>
+                      <option value="sr">Best serve-receive</option>
+                      <option value="serving">Best serving</option>
+                    </select>
+                  </label>
+                </div>
+                <h4 class="label-with-help adv-subhead">Skill weights <button class="help-btn" data-help="skills-key" aria-label="What do these skills mean?" type="button">?</button></h4>
+                <p class="hint">How much each skill matters on our team (1 = not much, 10 = critical).</p>
+                <div class="weight-list" id="weightList"></div>
+                <button class="btn btn-secondary btn-tiny" id="resetWeightsBtn" type="button">Reset weights</button>
+              </div>
+            </details>
+
+          </aside>
         </div>
       </section>
     </section>

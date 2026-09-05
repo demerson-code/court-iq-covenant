@@ -1491,11 +1491,11 @@ body.dragging-court .bench-drop-zone { display: block; }
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('assets/marco-silhouette.svg');
+  background-image: url('assets/covenant-logo.svg');
   background-position: center;
   background-repeat: no-repeat;
-  background-size: 140px auto;
-  opacity: .15;
+  background-size: 120px auto;
+  opacity: .08;
   pointer-events: none;
 }
 .empty-state > * { position: relative; }
@@ -1658,16 +1658,21 @@ body.dragging-court .bench-drop-zone { display: block; }
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
-.rot-zone-server {
-  border-color: var(--warn);
-}
 .rot-zone-server::after {
-  content: '⚡';
+  content: 'SERVE';
   position: absolute;
-  top: 2px;
+  top: 4px;
   right: 4px;
-  font-size: 10px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: var(--on-brand);
 }
+.rot-zone-server { border-color: var(--brand); }
+.rot-zone-libero .rot-chip { border: 1.5px dashed var(--brand); }
 .rot-zone-libero {
   border-color: var(--green);
   background: rgba(var(--brand-rgb), 0.06);
@@ -2231,3 +2236,43 @@ body.dragging-court .bench-drop-zone { display: block; }
 .adv-subhead { font-size: 14px; margin-top: 4px; }
 .help-btn-topbar { border-color: rgba(255,255,255,0.55); color: white; background: transparent; margin-left: 4px; width: 18px; height: 18px; font-size: 11px; }
 .help-btn-topbar:hover { background: rgba(255,255,255,0.2); }
+
+/* ===== Block 3: brand, tablet, landscape iPad ===== */
+.brand-logo { width: 32px; height: 32px; flex-shrink: 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)); }
+#lineupSide { display: flex; flex-direction: column; gap: 12px; }
+
+@media (min-width: 768px) {
+  .tabs { justify-content: flex-start; padding: 0 12px; }
+  .tab { flex: 0 0 auto; min-width: 150px; flex-direction: row; gap: 8px; padding: 12px 20px; font-size: 14px; }
+  .player-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .player-card.expanded { grid-column: 1 / -1; }
+  .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1024px) {
+  .team-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Landscape iPad (10"–13"): court on the left, bench + panels on the right. */
+@media (min-width: 1024px) and (orientation: landscape) {
+  body[data-tab="lineup"] main, body[data-tab="bench"] main { max-width: 1240px; }
+  #lineupBuilder { display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: 20px; row-gap: 16px; align-items: start; }
+  #lineupBuilder .lineup-controls { grid-column: 1 / -1; grid-row: 1; }
+  #lineupBuilder .lineup-status { grid-column: 1 / -1; grid-row: 2; }
+  #lineupResult:not([hidden]) { display: contents; }
+  #rotationGrid { grid-column: 1; grid-row: 3; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #lineupBreakdownPanel { grid-column: 1; grid-row: 4; }
+  #lineupSide { grid-column: 2; grid-row: 3 / span 2; position: sticky; top: 160px; max-height: calc(100vh - 176px); overflow-y: auto; padding-right: 2px; }
+  .rot-zone { min-height: 84px; }
+  .rot-chip-name { font-size: 15px; }
+  .rot-chip-role { font-size: 10px; }
+  .lc-field select, .lineup-controls .btn { min-height: 48px; }
+}
+
+/* Phone: the title must never run under the topbar buttons. Ellipsis at rest,
+   full text while the team name is being edited. */
+.topbar-row .brand-row { flex: 1 1 auto; min-width: 0; }
+.brand { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.brand:focus-within { white-space: normal; overflow: visible; }
+.topbar-row .icon-btn { flex-shrink: 0; }
+.topbar-row .icon-btn + .icon-btn { margin-left: 0; }

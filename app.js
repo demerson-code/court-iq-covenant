@@ -2681,6 +2681,8 @@ function buildPlayerChip(player, rotIdx, zone) {
   const firstName = (player.name || '?').split(' ')[0];
   const role = (player.positions && player.positions[0]) || '';
   const cls = ['rot-chip', `rot-chip-${role || 'OH'}`];
+  // Jersey first: at the bench a coach knows girls by number.
+  const chipName = (S.settings?.showJersey && player.jersey) ? `#${player.jersey} ${firstName}` : firstName;
   const chip = el('div', {
     cls: cls.join(' '),
     dataset: { playerId: player.id, rotIdx: String(rotIdx), zone: String(zone) },
@@ -2689,8 +2691,8 @@ function buildPlayerChip(player, rotIdx, zone) {
       pointerdown: e => onDragStart({ kind: 'court', playerId: player.id, rotIdx, zone }, e)
     }
   }, [
-    el('span', { cls: 'rot-chip-name', text: firstName }),
-    el('span', { cls: 'rot-chip-role', text: role })
+    el('span', { cls: 'rot-chip-name', text: chipName }),
+    el('span', { cls: 'rot-chip-role', text: roleLabel(role) })
   ]);
   return chip;
 }
@@ -3418,6 +3420,7 @@ function setTab(name) {
   if (!VALID_TABS.has(name)) name = 'roster';
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === name + 'Tab'));
+  document.body.dataset.tab = name; // lets CSS widen main only where the layout wants it
   if (name === 'scrimmage') renderScrimmage();
   if (S.currentTab !== name) {
     S.currentTab = name;

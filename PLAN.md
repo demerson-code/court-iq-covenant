@@ -495,9 +495,9 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
 
 ### Tasks
 
-- [ ] **3.1 — Body knows the tab.** `setTab` (`app.js:3168`): add `document.body.dataset.tab = name;`. CSS can now widen `main` only where the layout wants it.
+- [x] **3.1 — Body knows the tab.** `setTab` (`app.js:3168`): add `document.body.dataset.tab = name;`. CSS can now widen `main` only where the layout wants it.
 
-- [ ] **3.2 — Landscape tablet layout for Lineup.** Append to `styles.css`:
+- [x] **3.2 — Landscape tablet layout for Lineup.** Append to `styles.css`:
   ```css
   /* ===== Tablet landscape (iPad 10"–13") ===== */
   @media (min-width: 1024px) and (orientation: landscape) {
@@ -515,11 +515,11 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   `index.html`: wrap `#benchCard`, `#liberoPanel`, `#subPlanPanel` (Block 4), `#pairingsPanel`, `#advancedPanel` in `<aside id="lineupSide">`; `#lineupBreakdownPanel` stays under the grid. Phone/portrait keeps today's stacked flow (the grid rules only apply inside the media query).
 
-- [ ] **3.3 — Tablet pass on Roster and Scrimmage.** Extend `@media (min-width: 768px)` (`styles.css:1475`): `.player-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }` and `.player-card.expanded { grid-column: 1 / -1; }` so an open card spans both columns. Scrimmage `.team-grid` → 2 columns at 768, 3 at 1024 (verify current rules at `styles.css:1863+`). Tabs: at `min-width: 768px` the tab bar hugs left (`.tabs { justify-content: flex-start; } .tab { flex: 0 0 160px; }`).
+- [x] **3.3 — Tablet pass on Roster and Scrimmage.** Extend `@media (min-width: 768px)` (`styles.css:1475`): `.player-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }` and `.player-card.expanded { grid-column: 1 / -1; }` so an open card spans both columns. Scrimmage `.team-grid` → 2 columns at 768, 3 at 1024 (verify current rules at `styles.css:1863+`). Tabs: at `min-width: 768px` the tab bar hugs left (`.tabs { justify-content: flex-start; } .tab { flex: 0 0 160px; }`).
 
-- [ ] **3.4 — Brand.** ⚠️ *Blocked on assets.* When they arrive: replace the 4 `--brand*` lines in both token sets; drop `assets/covenant-logo.svg` (≤ 8KB, single color or currentColor so it works on the brand-gradient topbar); export `assets/icon-180.png`. Until then create a placeholder `covenant-logo.svg` (a rounded "C" mark, 32×32, `fill="currentColor"`). Topbar (`index.html:14-16`): replace `<span class="ball">🏐</span>` with `<img class="brand-logo" src="assets/covenant-logo.svg" alt="" width="32" height="32">`; `.brand-logo { width: 32px; height: 32px; }`. Empty state (`styles.css:1450-1473`) swaps `marco-silhouette.svg` for the logo at low opacity; delete `assets/marco-silhouette.svg`. `DEFAULT_TEAM_NAME` stays editable in the topbar as today.
+- [ ] **3.4 — Brand.** ⚠️ *Placeholder mark + icon shipped; the real logo/colors are still blocked on assets.* When they arrive: replace the 4 `--brand*` lines in both token sets; drop `assets/covenant-logo.svg` (≤ 8KB, single color or currentColor so it works on the brand-gradient topbar); export `assets/icon-180.png`. Until then create a placeholder `covenant-logo.svg` (a rounded "C" mark, 32×32, `fill="currentColor"`). Topbar (`index.html:14-16`): replace `<span class="ball">🏐</span>` with `<img class="brand-logo" src="assets/covenant-logo.svg" alt="" width="32" height="32">`; `.brand-logo { width: 32px; height: 32px; }`. Empty state (`styles.css:1450-1473`) swaps `marco-silhouette.svg` for the logo at low opacity; delete `assets/marco-silhouette.svg`. `DEFAULT_TEAM_NAME` stays editable in the topbar as today.
 
-- [ ] **3.5 — Rotation card readability.** Chips show `#jersey · Name` when `showJersey` (default on). Server zone gets a filled brand-color badge "SERVE" rather than the ⚡ pseudo-element (`styles.css:1614-1622`). Libero chip gets a distinct soft outline and an "L" tag. All new colors via tokens.
+- [x] **3.5 — Rotation card readability.** Chips show `#jersey · Name` when `showJersey` (default on). Server zone gets a filled brand-color badge "SERVE" rather than the ⚡ pseudo-element (`styles.css:1614-1622`). Libero chip gets a distinct soft outline and an "L" tag. All new colors via tokens.
 
 - [ ] **Verify** — iPad Safari (real device, landscape and portrait) and Chrome device toolbar at 1024×768 / 1366×1024: no horizontal scroll, 44px+ targets, sticky side column doesn't overlap the tab bar. Phone (375×812) unchanged from Block 1. Light and dark both.
 
