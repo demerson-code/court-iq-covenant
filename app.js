@@ -153,6 +153,11 @@ const safeStorage = (() => {
   };
 })();
 
+// Bump on every change that ships. Shown in the topbar tooltip and the print
+// footer, and used to cache-bust app.js / styles.css in index.html — so
+// "which version am I running?" is never a guess.
+const APP_VERSION = '2026.09.05-12';
+
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
 const THEME_KEY = 'court_iq_covenant_theme'; // 'light' | 'dark' | null (= follow device)
@@ -444,11 +449,13 @@ function load() {
   // localStorage even when we end up loading from URL — those aren't part
   // of the team data and shouldn't be reset by a fresh hash.
   let localOnly = null;
+  let localData = null;
   try {
     const raw = safeStorage.get(STORAGE_KEY);
     if (raw) {
       const data = JSON.parse(raw);
       if (data && typeof data === 'object') {
+        localData = data;
         localOnly = {
           currentTab: VALID_TABS.has(data.currentTab) ? data.currentTab : null,
           scrimmage: (data.scrimmage && typeof data.scrimmage === 'object') ? data.scrimmage : null,
@@ -459,6 +466,15 @@ function load() {
   } catch (e) { /* ignore */ }
 
   const urlState = readStateFromUrl();
+  // Newest wins. The address bar is synced 400ms after each edit, so a reload
+  // right after a drag (or an old bookmarked link) must not roll the team
+  // back to what the link says.
+  if (urlState && localData && typeof localData.lastEdited === 'number'
+      && localData.lastEdited > (typeof urlState.lastEdited === 'number' ? urlState.lastEdited : 0)) {
+    applyLoadedState(localData);
+    save({ silent: true }); // re-sync the address bar to the newer state
+    return { fromUrl: false, keptLocal: true };
+  }
   if (urlState) {
     applyLoadedState(urlState);
     // Restore local-only prefs that the URL hash doesn't carry.
@@ -2285,6 +2301,7 @@ if (typeof window !== 'undefined') {
   window.applyLevelGates = applyLevelGates;
   window.currentLevel = currentLevel;
   window.LEVELS = LEVELS;
+  window.APP_VERSION = APP_VERSION;
   window.chooseStarters = chooseStarters;
   window.arrangeRotation = arrangeRotation;
   window.roleForScoring = roleForScoring;
@@ -2497,6 +2514,7 @@ function buildPrintLineupDOM() {
       ]);
     }))
   ]);
+  page.appendChild(el('p', { cls: 'print-version', text: 'Court IQ — Covenant · v' + APP_VERSION }));
   if (coach.length) {
     page.appendChild(el('h2', { cls: 'print-h2', text: 'Your subs' }));
     page.appendChild(subTable(coach, 'coach'));
@@ -4472,6 +4490,16 @@ function applyTheme(pref) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = getComputedStyle(root).getPropertyValue('--brand').trim();
 }
+/* Flush the debounced address-bar sync when the page is about to go away. */
+function flushUrlSync() {
+  if (!urlUpdateTimer) return;
+  clearTimeout(urlUpdateTimer);
+  urlUpdateTimer = null;
+  if (hasMeaningfulState()) history.replaceState(null, '', '#d=' + encodeStateForUrl());
+}
+window.addEventListener('pagehide', flushUrlSync);
+window.addEventListener('beforeunload', flushUrlSync);
+
 function initTheme() {
   applyTheme(safeStorage.get(THEME_KEY));
   $('#themeToggle')?.addEventListener('click', () => {
@@ -4846,6 +4874,11 @@ function init() {
   // roster if absent or invalid.
   setTab(S.currentTab || 'roster');
 
+  const brandEl = document.querySelector('.brand');
+  if (brandEl) brandEl.title = 'Court IQ — Covenant · v' + APP_VERSION;
+  if (loadResult?.keptLocal) {
+    setTimeout(() => toast('Kept your latest changes (they were newer than the link).', 4000), 300);
+  }
   // First-time welcome when opening someone else's shared link
   if (loadResult?.fromUrl) {
     setTimeout(() => {

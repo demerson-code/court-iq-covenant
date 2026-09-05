@@ -849,6 +849,13 @@ There is no save step: the board is the starting six, rotations 2–6 are derive
 
 - [x] Derek: "include Libero as an option to drag in — there will always be 6 on the bench." The libero is now always the first bench card ("Libero · covers Lyla, Jesslyn"). Dragging her onto a starter toggles whether she comes in for that starter in the back row; coverage is **by player** (`liberoConfig.covers`), and the position checkboxes are only what she starts out covering after Suggest lineup (old saves with no `covers` still work by position). The Libero panel lists who she covers with ✕ chips.
 
+## Round 12 — "my changes aren't on the print" (2026-09-05)
+
+Could not reproduce: pointer-event drags (rotation-1 swap, rotation-3 sub) then the real Print button gave a sheet matching the court in all six rotations, before and after a reload. Most likely a stale cached `app.js` from before the round-9 print fix. Hardened so it can't be a guess next time:
+
+- [x] `APP_VERSION` stamp in the topbar tooltip and the print footer; `?v=` cache-busters on `app.js` / `styles.css`; `bump-version.py`.
+- [x] Load is newest-wins: if localStorage is newer than the address-bar link, local wins and the bar is re-synced (a reload 400ms after a drag, or an old bookmark, can no longer roll a change back). Address-bar sync is flushed on `pagehide`/`beforeunload`.
+
 ## Parallel Execution Map
 
 ```

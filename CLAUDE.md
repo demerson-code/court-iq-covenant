@@ -11,6 +11,10 @@ repo root via GitHub Pages. Forked from `court-iq-college` at `b66e0d5`.
 - **Deploy**: `git push origin main` (GitHub Pages auto-deploys, 30–90s)
 - **Plan**: `PLAN.md` (untracked by intent — owns the per-block scope; don't
   duplicate it here)
+- **Version**: `APP_VERSION` in `app.js` + `?v=` on the script/style tags.
+  Run `python bump-version.py` before every commit that changes app.js /
+  styles.css / index.html — it's how we tell a stale browser cache from a bug.
+  The stamp shows in the topbar tooltip and the print footer.
 
 ## Rules baseline
 

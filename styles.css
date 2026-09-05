@@ -2555,3 +2555,6 @@ body.dragging-court .bench-drop-zone { display: block; }
   border-radius: 999px; padding: 6px 12px; min-height: 36px;
 }
 .lb-cover-chip:hover { border-color: var(--brand); }
+
+/* ===== Round 12: version stamp ===== */
+@media print { .print-version { font-size: 7.5pt; color: #777; margin: 4pt 0 8pt; } }
