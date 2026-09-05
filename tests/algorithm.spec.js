@@ -27,6 +27,7 @@ test.beforeEach(async ({ page }) => {
     window.S.lineup.pairings = [];
     window.S.lineup.liberoConfig = { playerId: null, replaces: ['MB'], servesInRotation: null };
     window.S.lineup.planExclude = {};
+    window.S.lineup.board = null;
     window.S.lineup.everybodyPlays = true;
     window.S.settings.levelOverrides = {};
   });
@@ -357,5 +358,41 @@ test.describe('bench rules', () => {
     expect(out.back && out.back.leg).toBe('return');
     expect(out.back.inId).toBe('a');
     expect(out.back.outId).toBe('x');
+  });
+});
+
+test.describe('the board', () => {
+  test('a suggested lineup becomes a board that scores the same six', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster;
+      window.S.settings.system = '4-2';
+      window.S.settings.level = 'ms';
+      const r = window.generateLineup(window.S);
+      window.S.lineup.board = { startOrder: r.arrangement.startOrder.map(p => p.id), liberoId: r.libero.player.id };
+      const b = window.resultFromBoard(window.S);
+      return { ids: b.arrangement.startOrder.map(p => p.id), suggested: r.arrangement.startOrder.map(p => p.id), libero: b.libero.player.id, rotations: b.arrangement.rotations.length, holes: b.holes, error: b.error || null };
+    }, ms12);
+    expect(out.error).toBeNull();
+    expect(out.ids).toEqual(out.suggested);
+    expect(out.rotations).toBe(6);
+    expect(out.holes).toBe(0);
+  });
+
+  test('an unavailable starter leaves a hole and a warning, not an error', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster;
+      window.S.settings.system = '4-2';
+      window.S.settings.level = 'ms';
+      const r = window.generateLineup(window.S);
+      window.S.lineup.board = { startOrder: r.arrangement.startOrder.map(p => p.id), liberoId: r.libero.player.id };
+      const gone = window.S.players.find(p => p.id === window.S.lineup.board.startOrder[2]);
+      gone.available = false;
+      const b = window.resultFromBoard(window.S);
+      return { error: b.error || null, holes: b.holes, validation: b.validation, name: gone.name, slot2: b.arrangement.startOrder[2] };
+    }, ms12);
+    expect(out.error).toBeNull();
+    expect(out.holes).toBe(1);
+    expect(out.slot2).toBeNull();
+    expect(out.validation).toContain(out.name);
   });
 });

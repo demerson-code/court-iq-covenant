@@ -2528,3 +2528,8 @@ body.dragging-court .bench-drop-zone { display: block; }
   .court-view-bench { grid-column: 1 / -1; }
   .court-view-side { max-height: none; overflow: visible; }
 }
+
+/* ===== Round 5: the board ===== */
+.rot-chip-libero { cursor: default; }
+.rot-chip-empty { border-style: dashed; color: var(--text-mute); justify-content: center; align-items: center; min-height: 48px; }
+.big-rot-court .rot-chip-empty { font-size: 22px; }

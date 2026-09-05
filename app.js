@@ -190,14 +190,18 @@ function defaultLineup() {
   // pairings:         [{ a: playerId, b: playerId }] — both must be starters together
   // everybodyPlays:   run the sub planner after every Generate
   // planExclude:      { starterId: true } — starters the coach won't sub out
+  // board:            { startOrder: [6 playerIds by starting zone], liberoId } — THE lineup.
+  //                   "Suggest lineup" fills it from the optimizer; drags edit it directly.
+  //                   Everything on screen, in print and in the sub plan derives from it.
   return {
     optimizationMode: 'balanced',
-    overrides: [],
+    overrides: [],           // legacy pin system — always empty now
     liberoConfig: { playerId: null, replaces: ['MB'], servesInRotation: null },
     subPatterns: [],
     pairings: [],
     everybodyPlays: true,
-    planExclude: {}
+    planExclude: {},
+    board: null
   };
 }
 
@@ -398,7 +402,8 @@ function save(opts = {}) {
       subPatterns: S.lineup.subPatterns.filter(p => !p.auto), // planned subs are re-derived on Generate
       pairings: S.lineup.pairings,
       everybodyPlays: S.lineup.everybodyPlays !== false,
-      planExclude: S.lineup.planExclude || {}
+      planExclude: S.lineup.planExclude || {},
+      board: S.lineup.board || null
     },
     scrimmage: {
       teamCount: S.scrimmage.teamCount,
@@ -539,7 +544,10 @@ function applyLoadedState(data) {
       subPatterns: Array.isArray(data.lineup.subPatterns) ? data.lineup.subPatterns.filter(p => p && !p.auto) : [],
       pairings: Array.isArray(data.lineup.pairings) ? data.lineup.pairings : [],
       everybodyPlays: data.lineup.everybodyPlays !== false,
-      planExclude: (data.lineup.planExclude && typeof data.lineup.planExclude === 'object') ? data.lineup.planExclude : {}
+      planExclude: (data.lineup.planExclude && typeof data.lineup.planExclude === 'object') ? data.lineup.planExclude : {},
+      board: (data.lineup.board && Array.isArray(data.lineup.board.startOrder) && data.lineup.board.startOrder.length === 6)
+        ? { startOrder: data.lineup.board.startOrder.map(String), liberoId: typeof data.lineup.board.liberoId === 'string' ? data.lineup.board.liberoId : null }
+        : null
     };
   }
   if (data.scrimmage && typeof data.scrimmage === 'object') {
@@ -768,7 +776,7 @@ const HELP = {
         ] }
       ];
       if (isHS()) items.push({ callout: '6-2 (high school): two setters, but the one in the BACK row sets, so you always have three hitters up front. Needs two setters who can also hit.' });
-      items.push({ callout: 'Drag a player onto a court zone to pin her there. Generate again and the pin holds.' });
+      items.push({ callout: 'Suggest lineup gives you a starting six. After that the court is yours: drag a bench player onto a spot to put her in, or drag two players on the court to swap them. Nothing else moves.' });
       return items;
     }
   },
@@ -1567,6 +1575,83 @@ function planEverybodyPlays(state, result) {
   return { patterns, subsUsed, subsCap: cap, benchLeft: bench.filter(p => !planned.has(p.id)) };
 }
 
+/* ===== The board =====
+   resultFromBoard: score a coach-owned lineup. Same result shape as
+   generateLineup so every renderer, the sub plan, print and the bench tab
+   work unchanged. Everyone is scored by her own position (roleOf is empty —
+   on a manual board nobody "assigns" roles). A player who has gone missing
+   or unavailable leaves a hole ('—') and a warning rather than an error, so
+   the coach can drag someone into it. */
+function resultFromBoard(state) {
+  state = state || S;
+  const board = state.lineup && state.lineup.board;
+  const settings = state.settings || defaultSettings();
+  const level = currentLevel(settings);
+  const system = VALID_SYSTEMS.has(settings.system) ? settings.system : '4-2';
+  const mode = (state.lineup && state.lineup.optimizationMode) || 'balanced';
+  if (!board || !Array.isArray(board.startOrder) || board.startOrder.length !== 6) {
+    return { error: 'No lineup yet — tap Suggest lineup to start.', starters: null, validation: 'no-board' };
+  }
+  const byId = new Map(state.players.map(p => [p.id, p]));
+  const ok = p => p && p.available && (p.name || '').trim();
+  const six = board.startOrder.map(id => { const p = byId.get(id); return ok(p) ? p : null; });
+  const holes = six.filter(p => !p).length;
+  const missingNames = board.startOrder.map((id, i) => six[i] ? null : (byId.get(id) ? byId.get(id).name : null)).filter(Boolean);
+  const cfg = state.lineup.liberoConfig || {};
+  const libCandidate = (cfg.playerId && byId.get(cfg.playerId)) || (board.liberoId && byId.get(board.liberoId)) || null;
+  const libero = (libCandidate && ok(libCandidate) && !six.includes(libCandidate))
+    ? { player: libCandidate, replaces: cfg.replaces || ['MB'], servesInRotation: cfg.servesInRotation == null ? null : cfg.servesInRotation }
+    : null;
+  const arrangement = { startOrder: six, rotations: _rotationsFromStartOrder(six) };
+  const starters = { OH: [], MB: [], S: [], OPP: [], L: libero ? [libero.player] : [], DS: [] };
+  six.forEach(p => { if (!p) return; const r = p.positions && p.positions[0]; (starters[r] || starters.OH).push(p); });
+  const roleOf = {};
+  _fitCache = new Map();
+  const patterns = (state.lineup.subPatterns || []).filter(p => !p.auto);
+  const { score, perRotationScores } = scoreLineup(arrangement, mode, libero, patterns, level, settings, system, roleOf);
+  const validation = holes
+    ? `${missingNames.length ? missingNames.join(', ') : 'Someone'} ${holes === 1 ? 'is' : 'are'} no longer available — drag a bench player onto the empty spot.`
+    : null;
+  return { starters, roleOf, arrangement, libero, score, perRotationScores, validation, board, holes };
+}
+
+/* Board edits. Slot = position in startOrder; zone z in rotation r is slot (z-1+r) mod 6. */
+function boardSlot(rotIdx, zone) { return ((zone - 1 + rotIdx) % 6 + 6) % 6; }
+function boardPutPlayer(rotIdx, zone, playerId) {
+  const board = S.lineup.board;
+  if (!board) return false;
+  const slot = boardSlot(rotIdx, zone);
+  if (board.startOrder[slot] === playerId) return false;
+  if (playerId === board.liberoId || playerId === (S.lineup.liberoConfig && S.lineup.liberoConfig.playerId)) {
+    toast('She\u2019s the libero — change that under Libero first.', 3000);
+    return false;
+  }
+  const already = board.startOrder.indexOf(playerId);
+  if (already >= 0) {
+    // She's on the court elsewhere: swap the two spots.
+    const tmp = board.startOrder[slot];
+    board.startOrder[slot] = playerId;
+    board.startOrder[already] = tmp;
+  } else {
+    board.startOrder[slot] = playerId;
+  }
+  save();
+  runGenerate();
+  return true;
+}
+function boardSwap(rotA, zoneA, rotB, zoneB) {
+  const board = S.lineup.board;
+  if (!board) return false;
+  const a = boardSlot(rotA, zoneA), b = boardSlot(rotB, zoneB);
+  if (a === b) return false;
+  const tmp = board.startOrder[a];
+  board.startOrder[a] = board.startOrder[b];
+  board.startOrder[b] = tmp;
+  save();
+  runGenerate();
+  return true;
+}
+
 /* ===== Bench rules (pure) ===== */
 
 /* canSub: legality of `inId` replacing `outId` right now. */
@@ -2061,6 +2146,7 @@ if (typeof window !== 'undefined') {
   window.scoreLineup = scoreLineup;
   window.applySubPatterns = applySubPatterns;
   window.planEverybodyPlays = planEverybodyPlays;
+  window.resultFromBoard = resultFromBoard;
   window.canSub = canSub;
   window.applySub = applySub;
   window.pendingPlannedSub = pendingPlannedSub;
@@ -2457,22 +2543,22 @@ function performDrop(source, target) {
     return;
   }
 
-  if (!S.result) return;
+  if (!S.result || !S.lineup.board) return;
 
-  // bench → zone: pin player at this rotation+zone
+  // bench → zone: she takes that spot; whoever was there goes to the bench.
   if (source.kind === 'bench' && target.kind === 'zone') {
-    applyManualOverride(target.rotIdx, target.zone, source.playerId);
+    if (boardPutPlayer(target.rotIdx, target.zone, source.playerId)) toast('Swapped in.');
     return;
   }
-  // court → zone: pin the dragged player at the new zone (creates an override)
+  // court → zone: the two players trade spots.
   if (source.kind === 'court' && target.kind === 'zone') {
     if (source.rotIdx === target.rotIdx && source.zone === target.zone) return;
-    applyManualOverride(target.rotIdx, target.zone, source.playerId);
+    if (boardSwap(source.rotIdx, source.zone, target.rotIdx, target.zone)) toast('Swapped.');
     return;
   }
-  // court → bench: drop the override at this slot (releases the pin)
+  // court → bench: you always need six on the floor.
   if (source.kind === 'court' && target.kind === 'bench') {
-    removeOverrideAt(source.rotIdx, source.zone);
+    toast('Drag a bench player onto her spot instead — you need six on the floor.', 3200);
     return;
   }
 }
@@ -2857,11 +2943,8 @@ function renderLineup() {
   }
   wrap.hidden = false;
   if (status) {
-    const pins = (S.lineup.overrides || []).length;
-    status.textContent = pins
-      ? `${pins} ${pins === 1 ? 'player is' : 'players are'} pinned — the lineup is built around ${pins === 1 ? 'her' : 'them'}. Tap Clear pins to let the optimizer choose.`
-      : '';
-    status.className = 'lineup-status' + (pins ? ' lineup-status-pins' : '');
+    status.textContent = (r.holes && r.validation) ? r.validation : '';
+    status.className = 'lineup-status' + (r.holes ? ' lineup-status-warn' : '');
   }
   renderCourtView();
   renderRotationGrid();
@@ -2924,7 +3007,7 @@ function renderCourtView() {
     if (z === 1) cellCls.push('rot-zone-server');
     if (overridden) cellCls.push('rot-zone-override');
     if (isLibero) cellCls.push('rot-zone-libero');
-    const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${POSITION_NAMES[z]}${overridden ? ' · PINNED' : ''}` });
+    const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${POSITION_NAMES[z]}` });
     const chip = buildPlayerChip(player, idx, z, false, true);
     grid.appendChild(el('div', { cls: cellCls.join(' '), dataset: { rotIdx: String(idx), zone: String(z) } }, [zoneLabel, chip]));
   }
@@ -3008,7 +3091,7 @@ function renderRotationGrid() {
       if (overridden) cellCls.push('rot-zone-override');
       if (isLibero) cellCls.push('rot-zone-libero');
 
-      const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${ZONE_LABELS[z]}${overridden ? ' · PINNED' : ''}` });
+      const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${ZONE_LABELS[z]}` });
       const chip = buildPlayerChip(player, idx, z, player && subbedIn.has(player.id));
       const cell = el('div', {
         cls: cellCls.join(' '),
@@ -3066,12 +3149,16 @@ function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false) 
   const roleText = isSub ? 'SUB'
     : (assigned && assigned !== role && assigned !== 'L') ? `${roleLabel(role)} · playing ${roleLabel(assigned)}`
     : roleLabel(assigned || role);
+  const isLiberoChip = !!(S.result && S.result.libero && S.result.libero.player && S.result.libero.player.id === player.id);
   const chip = el('div', {
-    cls: cls.join(' '),
+    cls: cls.join(' ') + (isLiberoChip ? ' rot-chip-libero' : ''),
     dataset: { playerId: player.id, rotIdx: String(rotIdx), zone: String(zone) },
-    title: `${player.name} (${roleLabel(role)})`,
+    title: isLiberoChip ? `${player.name} — libero (change under Libero)` : `${player.name} (${roleLabel(role)})`,
     on: {
-      pointerdown: e => onDragStart({ kind: 'court', playerId: player.id, rotIdx, zone }, e)
+      pointerdown: e => {
+        if (isLiberoChip) return; // the libero isn't a spot on the board
+        onDragStart({ kind: 'court', playerId: player.id, rotIdx, zone }, e);
+      }
     }
   }, [
     el('span', { cls: 'rot-chip-name', text: chipName }),
@@ -3818,7 +3905,7 @@ function applyTeamSwap(srcTeamIdx, targetTeamIdx, playerId, targetPlayerId) {
 function startSet() {
   const m = S.match;
   let starters = m.starters, liberoId = m.liberoId, plan = m.plan;
-  if (S.result && S.result.arrangement) {
+  if (S.result && S.result.arrangement && S.result.arrangement.startOrder.every(Boolean)) {
     starters = S.result.arrangement.startOrder.map(p => p.id);
     liberoId = (S.result.libero && S.result.libero.player) ? S.result.libero.player.id : null;
     plan = (S.lineup.subPatterns || [])
@@ -4347,9 +4434,9 @@ function init() {
   $('#rotNext')?.addEventListener('click', () => { S.viewRot = ((S.viewRot || 0) + 1) % 6; renderCourtView(); });
   $('#rotPrev')?.addEventListener('click', () => { S.viewRot = ((S.viewRot || 0) + 5) % 6; renderCourtView(); });
   $('#generateBtn').addEventListener('click', () => {
-    runGenerate({ toastOnSuccess: true });
+    runGenerate({ fresh: true, toastOnSuccess: true });
   });
-  $('#clearOverridesBtn').addEventListener('click', () => {
+  $('#clearOverridesBtn')?.addEventListener('click', () => {
     if (!S.lineup.overrides.length) return;
     S.lineup.overrides = [];
     save();
@@ -4442,6 +4529,7 @@ function init() {
   renderRoster();
   renderWeights();
   applyLevelGates();
+  if (S.lineup.board) runGenerate(); // the coach's lineup is there when she opens the app
   updateCounts();
   updateLastEditedDisplay();
   // Restore the last-active tab (persisted in S.currentTab); falls back to
@@ -4458,7 +4546,24 @@ function init() {
 
 /* runGenerate: invoke generateLineup with current state and re-render. */
 function runGenerate(opts = {}) {
-  const result = generateLineup();
+  // Suggest (fresh) fills the board from the optimizer; otherwise the board
+  // is the lineup and we just score it.
+  if (opts.fresh || !S.lineup.board) {
+    const suggested = generateLineup();
+    if (suggested.error) {
+      S.result = suggested;
+      const printBtn0 = $('#printLineupBtn');
+      if (printBtn0) printBtn0.hidden = true;
+      renderLineup();
+      return;
+    }
+    S.lineup.board = {
+      startOrder: suggested.arrangement.startOrder.map(p => p.id),
+      liberoId: (suggested.libero && suggested.libero.player) ? suggested.libero.player.id : null
+    };
+    save();
+  }
+  const result = resultFromBoard(S);
   S.result = result;
   // Everybody-plays: derive the sub plan from the fresh lineup. Auto patterns
   // are replaced wholesale; coach-authored ones are untouched.
@@ -4476,7 +4581,7 @@ function runGenerate(opts = {}) {
   }
   if (result.validation) toast(result.validation, 3000);
   renderLineup();
-  if (opts.toastOnSuccess) toast('Lineup ready.');
+  if (opts.toastOnSuccess) toast('Here\u2019s a suggested six — drag to change it.', 2600);
 }
 
 /* scheduleRegen: debounced auto-regenerate when settings/lineup config change.
@@ -4484,7 +4589,7 @@ function runGenerate(opts = {}) {
    through ruleset options). */
 let _regenTimer = null;
 function scheduleRegen() {
-  if (!S.result) return; // never auto-generate before user has clicked Generate at least once
+  if (!S.lineup.board) return; // nothing to re-score until the coach has a lineup
   clearTimeout(_regenTimer);
   _regenTimer = setTimeout(() => runGenerate(), 200);
 }

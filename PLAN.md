@@ -804,6 +804,16 @@ Derek reviewed the preview and asked for four changes. All built and verified:
 - [x] **"Why Darcy over Ellie?"** — she was pinned. Pins are now impossible to miss: the zone label says PINNED in amber, and the status line under Generate counts pins and points at Clear pins. Chips playing out of position say so ("Outside · playing Middle") because 4-2 fills two middle slots even from a roster with no middles.
 - [x] **Bench full width** under the court, as a grid of cards; the score card keeps the side column alone.
 
+## Round 5 — pins replaced by the board (2026-09-05)
+
+Derek: "I don't like the pin system." Pins were the college optimizer's memory of drag overrides — every drag became a solver constraint, the rest of the lineup reshuffled, and the rule outlived the moment (and rode the share link). Replaced with **the board**:
+
+- [x] `S.lineup.board = { startOrder: [6 ids], liberoId }` is the lineup. Team-forever state (saved + shared).
+- [x] **Suggest lineup** (was Generate) runs the optimizer once and writes the board. After that the court is the coach's: bench → spot replaces that player; court → court swaps; nothing else moves. Court → bench is refused (six on the floor).
+- [x] `resultFromBoard()` scores the board into the same result shape, so the court view, grid, score card, sub plan, print sheet and bench tab are untouched. Everyone scores by her own position (no role assignment on a manual board). An unavailable starter leaves a '—' hole and a warning, not an error.
+- [x] The board renders on load; the libero chip isn't draggable (change her under Libero).
+- [x] Pins: `overrides` stays in state but is always empty; Clear pins button, PINNED labels and the pin status line are gone. 28 tests.
+
 ## Parallel Execution Map
 
 ```

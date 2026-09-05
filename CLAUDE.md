@@ -127,11 +127,17 @@ Beyond those:
 
 ## Lineup tab
 
+**The board is the lineup.** `S.lineup.board = { startOrder: [6 ids], liberoId }`
+travels with the team. "Suggest lineup" runs `generateLineup` once and writes
+the board; after that drags edit the board directly (`boardPutPlayer`,
+`boardSwap`) and `resultFromBoard()` re-scores it into the same result shape
+`generateLineup` returns, so every renderer downstream is board-agnostic.
+Nothing else moves on a drag. **Do not reintroduce pins/overrides** — Derek
+rejected them (2026-09-05): `S.lineup.overrides` is legacy and always empty.
+
 The main view is ONE rotation (`renderCourtView`, `S.viewRot` in memory only):
-big court, rotation dots + Rotate, a score card, and the bench beside it.
-Drops on the big court's zones go through the same `findDropTarget` /
-`applyManualOverride` path as the grid. The six-card grid lives under the
-collapsed "All six rotations" panel. The Bench tab is hidden unless
+big court, rotation dots + Rotate, a score card, and the bench full-width
+below. The six-card grid lives under the collapsed "All six rotations" panel. The Bench tab is hidden unless
 `settings.showBench` (Advanced) — the coaches run scenarios at home, not at
 the game.
 
