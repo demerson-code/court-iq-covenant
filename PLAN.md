@@ -660,7 +660,7 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
 
 ### Tasks
 
-- [ ] **5.1 — Match state + legality (pure).** `defaultMatch()` next to `defaultScrimmage()`:
+- [x] **5.1 — Match state + legality (pure).** `defaultMatch()` next to `defaultScrimmage()`:
   ```js
   function defaultMatch() {
     // Tonight-only. Persisted locally so a reload mid-set doesn't lose the
@@ -710,9 +710,10 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
   }
   window.canSub = canSub; window.applySub = applySub; window.pendingPlannedSub = pendingPlannedSub;
   ```
+  **Built as:** the match snapshots `starters`, `liberoId` and `plan` (ids only) at Start set, so a reload mid-set renders with `S.result === null`. `startSet()` reuses the snapshot for set 2+ if no fresh lineup exists.
   Also `startSet(result)`: snapshot `onFloor = result.arrangement.startOrder.map(p => p.id)`, `liberoId`, mark all seven `played`, `slots = {}` with each slot seeded `[id]`, `active = true`, score 0-0, `rotationIndex 0`, `subsUsed 0`. `endSet()`: `active=false`, `set++`, keep `played` and `log`. `newMatch()`: `S.match = defaultMatch()`.
 
-- [ ] **5.2 — Markup + render.** Nav: fourth tab `<button class="tab" data-tab="bench"><span class="tab-icon">📋</span><span class="tab-label">Bench</span></button>`. Panel:
+- [x] **5.2 — Markup + render.** Nav: fourth tab `<button class="tab" data-tab="bench"><span class="tab-icon">📋</span><span class="tab-label">Bench</span></button>`. Panel:
   ```html
   <section class="tab-panel" id="benchTab" role="tabpanel">
     <div class="bench-empty" id="benchNoLineup" hidden><p>Generate a lineup first — the bench screen runs off it.</p></div>
@@ -740,9 +741,9 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
   ```
   `renderBenchScreen()` (called from `setTab('bench')` and after every match mutation): court = current rotation's six from `S.match.onFloor` rotated by `rotationIndex` (reuse `_rotationsFromStartOrder` on the id array, map ids → players), libero applied via `effectiveRotationWithLibero` with `liberoConfig.replaces`; each floor chip is a 56px-tall button "Sub…". Nudge: if `S.match.us - S.match.them >= currentLevel().leadThreshold` and `pendingPlannedSub(...)` → banner "Up by 6 — **#12 Ava** in for **#4 Mia**. [Sub in]"; below threshold but a planned sub exists → muted "Planned: Ava for Mia when we're up by 5". Not-played = available players not in `S.match.played`.
 
-- [ ] **5.3 — Interactions.** Score ± mutate `S.match.us/them`, `save()`, re-render. `Rotate ➜` → `rotationIndex = (rotationIndex+1)%6`. Floor chip "Sub…" opens the existing confirm-modal pattern repurposed as a picker: list available bench players, each with `canSub()` evaluated — legal ones tappable, illegal ones greyed with the reason as subtext. Confirm → `S.match = applySub(...)`, toast "#12 in for #4 — 3 of 18". Nudge "Sub in" does the same for the planned pair (still runs `canSub`). End set / New match confirm via `confirmDialog`. `setTab('bench')` → if `!S.result || S.result.error` show `#benchNoLineup`.
+- [x] **5.3 — Interactions.** Score ± mutate `S.match.us/them`, `save()`, re-render. `Rotate ➜` → `rotationIndex = (rotationIndex+1)%6`. Floor chip "Sub…" opens the existing confirm-modal pattern repurposed as a picker: list available bench players, each with `canSub()` evaluated — legal ones tappable, illegal ones greyed with the reason as subtext. Confirm → `S.match = applySub(...)`, toast "#12 in for #4 — 3 of 18". Nudge "Sub in" does the same for the planned pair (still runs `canSub`). End set / New match confirm via `confirmDialog`. `setTab('bench')` → if `!S.result || S.result.error` show `#benchNoLineup`.
 
-- [ ] **5.4 — Styles.** `bench-main` is a 2-column grid at `min-width: 1024px landscape` (court `minmax(0,1fr)`, side 360px), stacked below. `.btn-score { min-width: 64px; min-height: 64px; font-size: 28px; }`. `.bench-nudge` is a brand-soft banner with a 56px primary button. Court reuses `.rot-court` scaled up: `.bench-court .rot-zone { min-height: 120px; }`.
+- [x] **5.4 — Styles.** `bench-main` is a 2-column grid at `min-width: 1024px landscape` (court `minmax(0,1fr)`, side 360px), stacked below. `.btn-score { min-width: 64px; min-height: 64px; font-size: 28px; }`. `.bench-nudge` is a brand-soft banner with a 56px primary button. Court reuses `.rot-court` scaled up: `.bench-court .rot-zone { min-height: 120px; }`.
 
 - [ ] **Verify** — iPad landscape: start set → +5 us → rotation of the first planned sub → nudge appears → Sub in → counter 1/18, "hasn't played" shrinks; reload → state intact; try to sub the same player in a different slot → refused with reason; set Advanced cap to 1 → second sub refused. Share link from this device opened elsewhere: no match state.
 

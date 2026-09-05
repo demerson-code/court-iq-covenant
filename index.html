@@ -69,6 +69,10 @@
       <span class="tab-icon">🆚</span>
       <span class="tab-label">Scrimmage</span>
     </button>
+    <button class="tab" data-tab="bench" role="tab">
+      <span class="tab-icon">📋</span>
+      <span class="tab-label">Bench</span>
+    </button>
   </nav>
 
   <main>
@@ -239,7 +243,69 @@
         </details>
       </section>
     </section>
+
+    <!-- BENCH TAB -->
+    <section class="tab-panel" id="benchTab" role="tabpanel">
+      <div class="empty-state" id="benchNoLineup" hidden>
+        <p><strong>Generate a lineup first</strong> — the bench screen runs off it.</p>
+        <button class="btn btn-secondary" id="benchGoLineup" type="button">Go to Lineup</button>
+      </div>
+      <div id="benchScreen" hidden>
+        <div class="bench-top">
+          <div class="bench-score" aria-label="Score">
+            <div class="bench-score-side">
+              <span class="bench-score-label">Us</span>
+              <div class="bench-score-ctl">
+                <button class="btn btn-score" id="usMinus" type="button" aria-label="Us minus one">−</button>
+                <span class="score-num score-us" id="scoreUs">0</span>
+                <button class="btn btn-score btn-primary" id="usPlus" type="button" aria-label="Us plus one">+</button>
+              </div>
+            </div>
+            <div class="bench-score-side">
+              <span class="bench-score-label">Them</span>
+              <div class="bench-score-ctl">
+                <button class="btn btn-score" id="themMinus" type="button" aria-label="Them minus one">−</button>
+                <span class="score-num score-them" id="scoreThem">0</span>
+                <button class="btn btn-score" id="themPlus" type="button" aria-label="Them plus one">+</button>
+              </div>
+            </div>
+          </div>
+          <div class="bench-meta"><span id="benchSet">Set 1</span> · <span id="benchRot">Rotation 1</span> · <span id="benchSubs">0 of 18 subs</span></div>
+          <div class="bench-actions">
+            <button class="btn btn-primary" id="startSetBtn" type="button">Start set</button>
+            <button class="btn btn-secondary" id="rotateBtn" type="button" hidden>Rotate ➜</button>
+            <button class="btn btn-secondary btn-tiny" id="endSetBtn" type="button" hidden>End set</button>
+            <button class="btn btn-secondary btn-tiny" id="newMatchBtn" type="button">New match</button>
+          </div>
+        </div>
+        <div class="bench-nudge" id="benchNudge" hidden></div>
+        <div class="bench-main">
+          <div class="bench-court" id="benchCourt"></div>
+          <aside class="bench-side">
+            <h3>Hasn't played yet</h3>
+            <div class="chip-row" id="notPlayed"></div>
+            <h3>Sub plan</h3>
+            <ol class="sub-plan-list" id="benchPlan"></ol>
+            <h3>Bench</h3>
+            <div class="chip-row" id="benchAvail"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <!-- Sub picker -->
+  <div class="modal" id="subPickerModal" hidden>
+    <div class="modal-content sub-picker">
+      <button class="breakdown-close" id="subPickerClose" aria-label="Close">×</button>
+      <h3 id="subPickerTitle">Sub</h3>
+      <p class="hint" id="subPickerHint"></p>
+      <div class="sub-picker-list" id="subPickerList"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="subPickerCancel" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Help / Info modal -->
   <div class="modal" id="helpModal" hidden>

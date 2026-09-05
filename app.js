@@ -209,6 +209,48 @@ function defaultScrimmage() {
   };
 }
 
+/* Match / bench state. Tonight-only: persisted locally so a reload mid-set
+   keeps the sub count, never in the share link. It snapshots its own
+   starters, libero and sub plan (as ids) at Start set, so the bench screen
+   never depends on a lineup still being in memory. */
+function defaultMatch() {
+  return {
+    active: false,
+    set: 1,
+    rotationIndex: 0,
+    us: 0, them: 0,
+    starters: [],      // 6 player ids by starting zone, captured at the first Start set
+    liberoId: null,
+    plan: [],          // [{ id, out, in, trigger, return }] — ids only
+    onFloor: [],       // 6 ids by starting slot; changes as subs happen
+    subsUsed: 0,
+    slots: {},         // slotIdx -> [ids who have occupied it, in order] (same-slot re-entry)
+    log: [],           // { set, rotationIndex, inId, outId, slot, us, them, t }
+    played: {}         // playerId -> true, for the whole match
+  };
+}
+function normalizeMatch(m) {
+  const d = defaultMatch();
+  if (!m || typeof m !== 'object') return d;
+  const ids = a => Array.isArray(a) ? a.filter(x => typeof x === 'string') : [];
+  const int = (v, dflt) => Number.isInteger(v) ? v : dflt;
+  return {
+    active: !!m.active,
+    set: int(m.set, 1) > 0 ? int(m.set, 1) : 1,
+    rotationIndex: ((int(m.rotationIndex, 0) % 6) + 6) % 6,
+    us: Math.max(0, int(m.us, 0)),
+    them: Math.max(0, int(m.them, 0)),
+    starters: ids(m.starters),
+    liberoId: typeof m.liberoId === 'string' ? m.liberoId : null,
+    plan: Array.isArray(m.plan) ? m.plan.filter(x => x && x.out && x.in && x.trigger) : [],
+    onFloor: ids(m.onFloor),
+    subsUsed: Math.max(0, int(m.subsUsed, 0)),
+    slots: (m.slots && typeof m.slots === 'object') ? m.slots : {},
+    log: Array.isArray(m.log) ? m.log : [],
+    played: (m.played && typeof m.played === 'object') ? m.played : {}
+  };
+}
+
 let S = {
   teamName: DEFAULT_TEAM_NAME,
   players: [],
@@ -216,6 +258,7 @@ let S = {
   settings: defaultSettings(),
   lineup: defaultLineup(),
   scrimmage: defaultScrimmage(),
+  match: defaultMatch(),
   result: null,
   lastEdited: null,
   rosterSort: 'avg-desc',   // 'avg-desc' | 'avg-asc' | 'name-asc' | 'name-desc'
@@ -353,6 +396,7 @@ function save(opts = {}) {
       // teams + lastSpread are intentionally NOT persisted; the user picks
       // teams fresh each session. (Save-to-favorites is future scope.)
     },
+    match: S.match,
     lastEdited: S.lastEdited,
     rosterSort: S.rosterSort,
     benchSort: S.benchSort
@@ -388,7 +432,8 @@ function load() {
       if (data && typeof data === 'object') {
         localOnly = {
           currentTab: VALID_TABS.has(data.currentTab) ? data.currentTab : null,
-          scrimmage: (data.scrimmage && typeof data.scrimmage === 'object') ? data.scrimmage : null
+          scrimmage: (data.scrimmage && typeof data.scrimmage === 'object') ? data.scrimmage : null,
+          match: (data.match && typeof data.match === 'object') ? data.match : null
         };
       }
     }
@@ -400,6 +445,7 @@ function load() {
     // Restore local-only prefs that the URL hash doesn't carry.
     if (localOnly) {
       if (localOnly.currentTab) S.currentTab = localOnly.currentTab;
+      if (localOnly.match) S.match = normalizeMatch(localOnly.match);
       if (localOnly.scrimmage) {
         S.scrimmage = {
           ...S.scrimmage,
@@ -498,6 +544,7 @@ function applyLoadedState(data) {
       lastSpread: null
     };
   }
+  if (data.match && typeof data.match === 'object') S.match = normalizeMatch(data.match);
   if (typeof data.lastEdited === 'number') S.lastEdited = data.lastEdited;
   if (SORT_MODES.has(data.rosterSort)) S.rosterSort = data.rosterSort;
   if (SORT_MODES.has(data.benchSort)) S.benchSort = data.benchSort;
@@ -525,7 +572,7 @@ function sortByMode(items, mode, getName, getAvg) {
      - Players are encoded as compact tuples (positional, no key names) and
        carry their `id` so lineup overrides / pairings / libero / sub-patterns
        (which reference player IDs) survive a round-trip.
-     - Scrimmage state, currentTab, and sort prefs are deliberately NOT
+     - Scrimmage state, match/bench state, currentTab, and sort prefs are deliberately NOT
        included — those are local "tonight" preferences that shouldn't follow
        a coach's link to another coach's device.
    Legacy decoder accepts the Block 1 ad-hoc shape (object-form players with
@@ -1503,6 +1550,63 @@ function planEverybodyPlays(state, result) {
   return { patterns, subsUsed, subsCap: cap, benchLeft: bench.filter(p => !planned.has(p.id)) };
 }
 
+/* ===== Bench rules (pure) ===== */
+
+/* canSub: legality of `inId` replacing `outId` right now. */
+function canSub(match, level, inId, outId) {
+  if (!match.active) return { ok: false, reason: 'Start the set first.' };
+  if (match.subsUsed + 1 > level.subsPerSet) return { ok: false, reason: `Out of subs (${level.subsPerSet} per set).` };
+  const slot = match.onFloor.indexOf(outId);
+  if (slot < 0) return { ok: false, reason: 'That player is not on the floor.' };
+  if (match.onFloor.includes(inId)) return { ok: false, reason: 'She is already on the floor.' };
+  if (inId === match.liberoId) return { ok: false, reason: 'The libero swaps on her own — no sub needed.' };
+  if (outId === match.liberoId) return { ok: false, reason: 'The libero swaps on her own.' };
+  // Same-slot re-entry: a player who has been in the game may only return to the slot she left.
+  for (const sKey of Object.keys(match.slots)) {
+    if (Number(sKey) !== slot && (match.slots[sKey] || []).includes(inId)) {
+      return { ok: false, reason: 'She can only re-enter for the player who replaced her.' };
+    }
+  }
+  return { ok: true };
+}
+
+/* applySub: returns a new match with the sub applied (no legality check). */
+function applySub(match, inId, outId) {
+  const slot = match.onFloor.indexOf(outId);
+  const next = { ...match, onFloor: match.onFloor.slice(), slots: { ...match.slots }, log: match.log.slice(), played: { ...match.played } };
+  next.onFloor[slot] = inId;
+  next.slots[slot] = (match.slots[slot] || [outId]).concat(inId);
+  next.subsUsed = match.subsUsed + 1;
+  next.played[inId] = true;
+  next.log.push({ set: match.set, rotationIndex: match.rotationIndex, inId, outId, slot, us: match.us, them: match.them, t: Date.now() });
+  return next;
+}
+
+/* pendingPlannedSub: the planned swap that belongs to this rotation, if any.
+   'in' leg: the sub's rotation is now and the starter is on the floor.
+   'return' leg: the return rotation is now and the sub is on the floor. */
+function pendingPlannedSub(match, plan) {
+  const list = plan || match.plan || [];
+  const r = match.rotationIndex;
+  const inLeg = list.find(x => x.trigger && x.trigger.rotationIndex === r && match.onFloor.includes(x.out) && !match.onFloor.includes(x.in));
+  if (inLeg) return { pattern: inLeg, leg: 'in', inId: inLeg.in, outId: inLeg.out };
+  const back = list.find(x => x.return && x.return.rotationIndex === r && match.onFloor.includes(x.in) && !match.onFloor.includes(x.out));
+  if (back) return { pattern: back, leg: 'return', inId: back.out, outId: back.in };
+  return null;
+}
+
+/* The six on the floor for the current rotation, as player objects with the
+   libero applied. Works from ids so it survives a reload. */
+function matchFloor(match, players, liberoReplaces, level) {
+  const byId = new Map(players.map(p => [p.id, p]));
+  const order = match.onFloor.map(id => byId.get(id) || null);
+  if (order.length !== 6) return null;
+  const rot = _rotationsFromStartOrder(order)[match.rotationIndex];
+  const lib = match.liberoId && byId.get(match.liberoId);
+  const libero = lib ? { player: lib, replaces: liberoReplaces || ['MB'] } : null;
+  return effectiveRotationWithLibero(rot, libero, level);
+}
+
 /* generateLineup: public entry. Returns the new-shape result that the lineup
    builder UI consumes directly (starters, arrangement, libero, score,
    perRotationScores, validation). Block 2's back-compat layer is gone. */
@@ -1935,6 +2039,10 @@ if (typeof window !== 'undefined') {
   window.scoreLineup = scoreLineup;
   window.applySubPatterns = applySubPatterns;
   window.planEverybodyPlays = planEverybodyPlays;
+  window.canSub = canSub;
+  window.applySub = applySub;
+  window.pendingPlannedSub = pendingPlannedSub;
+  window.defaultMatch = defaultMatch;
   window._patternActiveAt = _patternActiveAt;
   window.playerFitForRole = playerFitForRole;
   window.validRolesForPlayer = validRolesForPlayer;
@@ -3538,6 +3646,223 @@ function applyTeamSwap(srcTeamIdx, targetTeamIdx, playerId, targetPlayerId) {
   renderTeamGrid();
 }
 
+/* ===== Bench screen ===== */
+
+function startSet() {
+  const m = S.match;
+  let starters = m.starters, liberoId = m.liberoId, plan = m.plan;
+  if (S.result && S.result.arrangement) {
+    starters = S.result.arrangement.startOrder.map(p => p.id);
+    liberoId = (S.result.libero && S.result.libero.player) ? S.result.libero.player.id : null;
+    plan = (S.lineup.subPatterns || [])
+      .filter(p => p.auto && p.in && p.out)
+      .map(p => ({ id: p.id, out: p.out, in: p.in.id, trigger: { ...p.trigger }, return: p.return ? { ...p.return } : null }));
+  }
+  if (starters.length !== 6) return false;
+  const slots = {};
+  starters.forEach((id, i) => { slots[i] = [id]; });
+  const played = { ...m.played };
+  starters.forEach(id => { played[id] = true; });
+  if (liberoId) played[liberoId] = true;
+  S.match = { ...m, active: true, rotationIndex: 0, us: 0, them: 0, starters, liberoId, plan, onFloor: starters.slice(), subsUsed: 0, slots, played };
+  save();
+  return true;
+}
+function endSet() {
+  S.match = { ...S.match, active: false, set: S.match.set + 1 };
+  save();
+}
+function newMatch() {
+  S.match = defaultMatch();
+  save();
+}
+function doSub(inId, outId) {
+  const chk = canSub(S.match, currentLevel(), inId, outId);
+  if (!chk.ok) { toast(chk.reason, 3000); return false; }
+  S.match = applySub(S.match, inId, outId);
+  save();
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  toast(`${playerTag(byId.get(inId))} in for ${playerTag(byId.get(outId))} — ${S.match.subsUsed} of ${currentLevel().subsPerSet} subs`, 2600);
+  closeSubPicker();
+  renderBenchScreen();
+  return true;
+}
+
+function playerTag(p) {
+  if (!p) return '?';
+  return (S.settings?.showJersey && p.jersey) ? `#${p.jersey} ${p.name}` : (p.name || '(unnamed)');
+}
+
+function renderBenchScreen() {
+  const noLineup = $('#benchNoLineup'), screen = $('#benchScreen');
+  if (!noLineup || !screen) return;
+  const m = S.match;
+  const level = currentLevel();
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  const canStart = !!(S.result && S.result.arrangement) || m.starters.length === 6;
+  const show = canStart || m.active;
+  noLineup.hidden = show;
+  screen.hidden = !show;
+  if (!show) return;
+
+  $('#scoreUs').textContent = String(m.us);
+  $('#scoreThem').textContent = String(m.them);
+  $('#benchSet').textContent = `Set ${m.set}`;
+  $('#benchRot').textContent = `Rotation ${m.rotationIndex + 1}`;
+  $('#benchSubs').textContent = `${m.subsUsed} of ${level.subsPerSet} subs`;
+  $('#startSetBtn').hidden = m.active;
+  $('#startSetBtn').textContent = m.set > 1 ? `Start set ${m.set}` : 'Start set';
+  $('#rotateBtn').hidden = !m.active;
+  $('#endSetBtn').hidden = !m.active;
+  $$('.btn-score').forEach(b => { b.disabled = !m.active; });
+
+  // Court
+  const court = $('#benchCourt');
+  court.replaceChildren();
+  const floor = m.active ? matchFloor(m, S.players, S.lineup.liberoConfig?.replaces, level) : null;
+  if (floor) {
+    const grid = el('div', { cls: 'rot-court bench-rot-court' });
+    const subbedIn = new Set(m.onFloor.filter(id => !m.starters.includes(id)));
+    for (const z of [4, 3, 2, 5, 6, 1]) {
+      const player = playerAtZone(floor, z);
+      const isLibero = player && player.id === m.liberoId;
+      const isSub = player && subbedIn.has(player.id);
+      const cellCls = ['rot-zone'];
+      if (z === 1) cellCls.push('rot-zone-server');
+      if (isLibero) cellCls.push('rot-zone-libero');
+      const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${ZONE_LABELS[z]}` });
+      const role = (player && player.positions && player.positions[0]) || '';
+      const chipCls = ['rot-chip', 'bench-chip', `rot-chip-${role || 'OH'}`];
+      if (isSub) chipCls.push('rot-chip-sub');
+      const chip = el('button', {
+        cls: chipCls.join(' '),
+        attrs: { type: 'button' },
+        title: isLibero ? 'The libero swaps on her own' : 'Tap to sub her out',
+        on: { click: () => {
+          if (!player) return;
+          if (isLibero) { toast('The libero swaps on her own — no sub needed.'); return; }
+          openSubPicker({ outId: player.id });
+        } }
+      }, [
+        el('span', { cls: 'rot-chip-name', text: player ? playerTag(player) : '—' }),
+        el('span', { cls: 'rot-chip-role', text: isLibero ? 'Libero' : (isSub ? 'SUB' : roleLabel(role)) }),
+        isLibero ? null : el('span', { cls: 'bench-chip-action', text: 'Sub…' })
+      ]);
+      grid.appendChild(el('div', { cls: cellCls.join(' ') }, [zoneLabel, chip]));
+    }
+    court.appendChild(grid);
+    court.appendChild(el('p', { cls: 'hint bench-court-hint', text: 'Tap Rotate when we win the serve back. Tap a player to sub her out.' }));
+  } else {
+    court.appendChild(el('div', { cls: 'bench-idle' }, [
+      el('p', { cls: 'bench-idle-title', text: m.set > 1 ? `Set ${m.set - 1} is done.` : 'Ready when you are.' }),
+      el('p', { cls: 'hint', text: m.set > 1
+        ? 'Tap Start set when the next one begins. Playing time carries over; subs reset.'
+        : 'Tap Start set at the first whistle. The starting six come from your lineup.' })
+    ]));
+  }
+
+  // Nudge
+  const nudge = $('#benchNudge');
+  nudge.replaceChildren();
+  const pending = m.active ? pendingPlannedSub(m) : null;
+  const lead = m.us - m.them;
+  if (pending) {
+    const inP = byId.get(pending.inId), outP = byId.get(pending.outId);
+    const ready = lead >= level.leadThreshold;
+    nudge.hidden = false;
+    nudge.classList.toggle('is-ready', ready);
+    const verb = pending.leg === 'return' ? 'back in for' : 'in for';
+    nudge.appendChild(el('div', { cls: 'bench-nudge-text' }, [
+      el('strong', { text: ready ? `Up by ${lead} — ` : `Planned for this rotation: ` }),
+      el('span', { text: `${playerTag(inP)} ${verb} ${playerTag(outP)}` }),
+      ready ? null : el('span', { cls: 'bench-nudge-sub', text: ` (once we're up by ${level.leadThreshold}${lead > 0 ? `, now +${lead}` : ''})` })
+    ]));
+    nudge.appendChild(el('button', {
+      cls: `btn ${ready ? 'btn-primary' : 'btn-secondary'} bench-nudge-btn`,
+      attrs: { type: 'button' },
+      text: pending.leg === 'return' ? 'Bring her back' : 'Sub in',
+      on: { click: () => doSub(pending.inId, pending.outId) }
+    }));
+  } else {
+    nudge.hidden = true;
+  }
+
+  // Hasn't played yet
+  const notPlayed = $('#notPlayed');
+  notPlayed.replaceChildren();
+  const avail = S.players.filter(p => p.available && (p.name || '').trim());
+  const waiting = avail.filter(p => !m.played[p.id]);
+  if (waiting.length === 0) {
+    notPlayed.appendChild(el('span', { cls: 'hint', text: m.starters.length ? 'Everyone has played. 🎉' : '—' }));
+  }
+  waiting.forEach(p => notPlayed.appendChild(el('button', {
+    cls: 'chip chip-waiting', attrs: { type: 'button' }, text: playerTag(p),
+    title: 'Tap to pick who she goes in for',
+    on: { click: () => { if (m.active) openSubPicker({ inId: p.id }); else toast('Start the set first.'); } }
+  })));
+
+  // Plan (compact)
+  const planList = $('#benchPlan');
+  planList.replaceChildren();
+  if (!m.plan.length) planList.appendChild(el('li', { cls: 'sub-plan-empty', text: m.active ? 'No planned subs for this set.' : 'The plan fills in at Start set.' }));
+  m.plan.forEach(x => {
+    const inP = byId.get(x.in), outP = byId.get(x.out);
+    if (!inP || !outP) return;
+    const done = !!m.played[inP.id];
+    const li = el('li', { cls: 'sub-plan-row compact' + (done ? ' is-done' : '') });
+    li.appendChild(el('div', { cls: 'sub-plan-who' }, [el('strong', { text: playerTag(inP) }), ' for ', el('strong', { text: playerTag(outP) })]));
+    li.appendChild(el('div', { cls: 'sub-plan-when', text: `Rotation ${x.trigger.rotationIndex + 1}${x.return ? ` → out at ${x.return.rotationIndex + 1}` : ''}${done ? ' · ✓ played' : ''}` }));
+    planList.appendChild(li);
+  });
+
+  // Bench
+  const benchWrap = $('#benchAvail');
+  benchWrap.replaceChildren();
+  const onBench = avail.filter(p => !m.onFloor.includes(p.id) && p.id !== m.liberoId);
+  if (onBench.length === 0) benchWrap.appendChild(el('span', { cls: 'hint', text: '—' }));
+  onBench.forEach(p => benchWrap.appendChild(el('button', {
+    cls: 'chip' + (m.played[p.id] ? ' chip-played' : ''), attrs: { type: 'button' }, text: playerTag(p),
+    title: 'Tap to pick who she goes in for',
+    on: { click: () => { if (m.active) openSubPicker({ inId: p.id }); else toast('Start the set first.'); } }
+  })));
+}
+
+/* Sub picker: one side fixed, pick the other. Illegal choices stay visible
+   with the reason, so the coach learns the rule instead of hitting a wall. */
+function openSubPicker({ inId, outId }) {
+  const modal = $('#subPickerModal');
+  const list = $('#subPickerList');
+  const m = S.match;
+  const level = currentLevel();
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  list.replaceChildren();
+  let cands;
+  if (outId) {
+    $('#subPickerTitle').textContent = `Who goes in for ${playerTag(byId.get(outId))}?`;
+    cands = S.players.filter(p => p.available && (p.name || '').trim() && !m.onFloor.includes(p.id) && p.id !== m.liberoId)
+      .map(p => ({ p, chk: canSub(m, level, p.id, outId), go: () => doSub(p.id, outId) }));
+  } else {
+    $('#subPickerTitle').textContent = `Who does ${playerTag(byId.get(inId))} go in for?`;
+    cands = m.onFloor.map(id => byId.get(id)).filter(Boolean)
+      .map(p => ({ p, chk: canSub(m, level, inId, p.id), go: () => doSub(inId, p.id) }));
+  }
+  $('#subPickerHint').textContent = `${m.subsUsed} of ${level.subsPerSet} subs used`;
+  cands.forEach(({ p, chk, go }) => {
+    const row = el('button', {
+      cls: 'sub-pick-row' + (chk.ok ? '' : ' is-illegal'),
+      attrs: { type: 'button' },
+      on: { click: () => { if (chk.ok) go(); else toast(chk.reason, 3000); } }
+    }, [
+      el('span', { cls: 'sub-pick-name', text: playerTag(p) }),
+      el('span', { cls: 'sub-pick-meta', text: chk.ok ? (m.played[p.id] ? 'has played' : 'hasn\u2019t played yet') : chk.reason })
+    ]);
+    list.appendChild(row);
+  });
+  if (cands.length === 0) list.appendChild(el('p', { cls: 'hint', text: 'Nobody available.' }));
+  modal.hidden = false;
+}
+function closeSubPicker() { const m = $('#subPickerModal'); if (m) m.hidden = true; }
+
 /* ===== Level gating =====
    HS-only controls are marked data-hs-only in the HTML. System <option>s are
    marked data-system and hidden when the current level doesn't offer that
@@ -3603,6 +3928,7 @@ function setTab(name) {
   $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === name + 'Tab'));
   document.body.dataset.tab = name; // lets CSS widen main only where the layout wants it
   if (name === 'scrimmage') renderScrimmage();
+  if (name === 'bench') renderBenchScreen();
   if (S.currentTab !== name) {
     S.currentTab = name;
     save();
@@ -3757,6 +4083,46 @@ function init() {
       scheduleRegen();
     });
   }
+
+  // Bench screen
+  const bump = (key, delta) => () => {
+    if (!S.match.active) return;
+    S.match = { ...S.match, [key]: Math.max(0, S.match[key] + delta) };
+    save();
+    renderBenchScreen();
+  };
+  $('#usPlus')?.addEventListener('click', bump('us', 1));
+  $('#usMinus')?.addEventListener('click', bump('us', -1));
+  $('#themPlus')?.addEventListener('click', bump('them', 1));
+  $('#themMinus')?.addEventListener('click', bump('them', -1));
+  $('#rotateBtn')?.addEventListener('click', () => {
+    if (!S.match.active) return;
+    S.match = { ...S.match, rotationIndex: (S.match.rotationIndex + 1) % 6 };
+    save();
+    renderBenchScreen();
+  });
+  $('#startSetBtn')?.addEventListener('click', () => {
+    if (!startSet()) { toast('Generate a lineup first.'); return; }
+    renderBenchScreen();
+  });
+  $('#endSetBtn')?.addEventListener('click', async () => {
+    const ok = await confirmDialog('End this set?', 'Subs reset for the next set. Who has played carries over.');
+    if (!ok) return;
+    endSet();
+    renderBenchScreen();
+  });
+  $('#newMatchBtn')?.addEventListener('click', async () => {
+    if (S.match.active || Object.keys(S.match.played).length) {
+      const ok = await confirmDialog('Start a new match?', 'Clears the score, subs, and who has played.');
+      if (!ok) return;
+    }
+    newMatch();
+    renderBenchScreen();
+  });
+  $('#benchGoLineup')?.addEventListener('click', () => setTab('lineup'));
+  $('#subPickerClose')?.addEventListener('click', closeSubPicker);
+  $('#subPickerCancel')?.addEventListener('click', closeSubPicker);
+  $('#subPickerModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeSubPicker(); });
 
   $('#everybodyPlaysToggle')?.addEventListener('change', e => {
     S.lineup.everybodyPlays = !!e.target.checked;
