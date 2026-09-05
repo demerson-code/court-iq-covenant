@@ -2396,11 +2396,12 @@ function buildPrintLineupDOM() {
   page.appendChild(el('header', { cls: 'print-header' }, [
     el('h1', { text: 'Court IQ — ' + teamName }),
     el('div', { cls: 'print-meta', text:
-      'Lineup · ' + date + ' · System ' + sys + ' · ' + modeLabel + liberoNote })
+      'Lineup · ' + date + ' · System ' + sys + (isHS() ? ' · ' + modeLabel : '') + liberoNote })
   ]));
 
   const level = currentLevel();
   const patterns = S.lineup.subPatterns || [];
+  const coach = coachPatterns();
   const tagOf = (p) => (S.settings?.showJersey && p.jersey) ? '#' + p.jersey + ' ' : '';
   const cell = (p) => {
     if (!p) return el('td');
@@ -2414,8 +2415,10 @@ function buildPrintLineupDOM() {
 
   const rots = el('div', { cls: 'print-rotations' });
   (r.arrangement.rotations || []).forEach((raw, i) => {
-    // Same pipeline as the screen: planned subs, then the libero swap.
-    const rot = effectiveRotationWithLibero(applySubPatterns(raw, patterns, i), r.libero, level, i);
+    // Same as the big court: starting six, the coach's subs, the libero.
+    // The automatic "if we're ahead" plan is printed as a table below, not
+    // baked into the diagrams — the sheet must match what the coach built.
+    const rot = effectiveRotationWithLibero(applySubPatterns(raw, coach, i), r.libero, level, i);
     const sc = (r.perRotationScores[i] || 0).toFixed(1);
     const fr = rot.frontRow || [];
     const br = rot.backRow || [];
@@ -2437,29 +2440,37 @@ function buildPrintLineupDOM() {
   });
   page.appendChild(rots);
 
-  // Sub plan
-  const auto = patterns.filter(p => (p.auto || p.coach) && p.in && p.out);
+  // Subs: the coach's own first, then the automatic plan as its own table.
   const byId = new Map(S.players.map(p => [p.id, p]));
+  const subsUsed = patterns.reduce((n, p) => n + (p.return ? 2 : 1), 0);
+  const subTable = (rows, kind) => el('table', { cls: 'print-subplan' }, [
+    el('thead', {}, [el('tr', {}, [
+      el('th', { text: '' }), el('th', { text: 'In' }), el('th', { text: 'For' }),
+      el('th', { text: 'Goes in' }), el('th', { text: 'Comes out' })
+    ])]),
+    el('tbody', {}, rows.map((pat, i) => {
+      const starter = byId.get(pat.out);
+      const first = starter ? starter.name.split(' ')[0] : '';
+      return el('tr', {}, [
+        el('td', { cls: 'num', text: String(i + 1) }),
+        el('td', { text: tagOf(pat.in) + (pat.in.name || '—') }),
+        el('td', { text: starter ? tagOf(starter) + (starter.name || '—') : '—' }),
+        el('td', { text: 'Rotation ' + (pat.trigger.rotationIndex + 1) + (kind === 'auto' ? ' — when ' + first + ' rotates to serve' : '') }),
+        el('td', { text: !pat.return ? '—'
+          : (kind === 'coach' && pat.return.rotationIndex === 0) ? 'End of trip'
+          : 'Rotation ' + (pat.return.rotationIndex + 1) + (kind === 'coach' ? ' — ' + first + ' back in' : '') })
+      ]);
+    }))
+  ]);
+  if (coach.length) {
+    page.appendChild(el('h2', { cls: 'print-h2', text: 'Your subs' }));
+    page.appendChild(subTable(coach, 'coach'));
+  }
+  const auto = patterns.filter(p => p.auto && p.in && p.out);
   if (auto.length) {
-    const subsUsed = patterns.reduce((n, p) => n + (p.return ? 2 : 1), 0);
-    page.appendChild(el('h2', { cls: 'print-h2', text: 'Sub plan — ' + subsUsed + ' of ' + level.subsPerSet + ' subs' }));
-    const tbl = el('table', { cls: 'print-subplan' }, [
-      el('thead', {}, [el('tr', {}, [
-        el('th', { text: '' }), el('th', { text: 'In' }), el('th', { text: 'For' }),
-        el('th', { text: 'Goes in' }), el('th', { text: 'Comes out' })
-      ])]),
-      el('tbody', {}, auto.map((pat, i) => {
-        const starter = byId.get(pat.out);
-        return el('tr', {}, [
-          el('td', { cls: 'num', text: String(i + 1) }),
-          el('td', { text: tagOf(pat.in) + (pat.in.name || '—') }),
-          el('td', { text: starter ? tagOf(starter) + (starter.name || '—') : '—' }),
-          el('td', { text: 'Rotation ' + (pat.trigger.rotationIndex + 1) + (pat.coach ? ' (your sub)' : (starter ? ' — when ' + starter.name.split(' ')[0] + ' rotates to serve' : '')) }),
-          el('td', { text: pat.return ? (pat.coach && pat.return.rotationIndex === 0 ? 'End of trip' : 'Rotation ' + (pat.return.rotationIndex + 1)) : '—' })
-        ]);
-      }))
-    ]);
-    page.appendChild(tbl);
+    page.appendChild(el('h2', { cls: 'print-h2', text: 'If we\u2019re ahead — planned subs (' + subsUsed + ' of ' + level.subsPerSet + ' subs with the ones above)' }));
+    page.appendChild(el('p', { cls: 'print-note', text: 'Not shown in the rotations above. Each goes in when her starter rotates back to serve, plays the back row, and comes out before the net.' }));
+    page.appendChild(subTable(auto, 'auto'));
     if (S.plan && S.plan.benchLeft && S.plan.benchLeft.length) {
       page.appendChild(el('p', { cls: 'print-note', text: 'Still on the bench: ' + S.plan.benchLeft.map(p => p.name).join(', ') + ' (no subs left).' }));
     }
@@ -3205,7 +3216,7 @@ function renderRotationGrid() {
 
   const settings = S.settings || defaultSettings();
   const ruleset = currentLevel(settings);
-  const patterns = S.lineup.subPatterns || [];
+  const patterns = coachPatterns(); // what the coach built — the auto plan lives in the Sub plan list
 
   r.arrangement.rotations.forEach((rot, idx) => {
     const score = r.perRotationScores[idx];
@@ -3577,6 +3588,9 @@ function renderSubPlanPanel() {
   }
   if (auto.length === 0 && coach.length === 0) {
     list.appendChild(el('li', { cls: 'sub-plan-empty', text: 'Everyone available is already on the floor.' }));
+  }
+  if (auto.length) {
+    list.appendChild(el('li', { cls: 'sub-plan-heading', text: coach.length ? 'If we\u2019re ahead — planned subs (not shown on the court)' : 'If we\u2019re ahead — planned subs' }));
   }
   auto.forEach(pat => {
     const starter = byId.get(pat.out);

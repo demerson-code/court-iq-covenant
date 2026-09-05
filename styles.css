@@ -2538,3 +2538,6 @@ body.dragging-court .bench-drop-zone { display: block; }
 .sub-plan-row.is-coach { border-color: var(--brand); background: rgba(var(--brand-rgb), 0.05); }
 .sub-plan-row.is-coach::before { background: var(--brand-dark); content: '✓'; }
 .court-hint strong { color: var(--text); }
+
+/* ===== Round 9: plan heading ===== */
+.sub-plan-heading { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-mute); padding: 8px 2px 0; list-style: none; }

@@ -837,6 +837,10 @@ There is no save step: the board is the starting six, rotations 2–6 are derive
 - [x] Coach subs appear in the Sub plan ("Your sub", ✕ to remove), print on the sheet, feed the Bench tab, and the everybody-plays planner works around them (their subs count, their starters are spoken for).
 - [x] Sub patterns now persist/share `in` as an id and relink on load (no stale player copies). 34 tests.
 
+## Round 9 — the print must match the court (2026-09-05)
+
+- [x] Derek: the printout showed subs he never made (Ansley, LuLu). Cause: the printed rotations and the six-rotation grid baked in the automatic everybody-plays plan while the big court showed only his subs. Now every rotation diagram (court, grid, print) is starters + coach subs + libero; the automatic plan prints as its own labeled table ("If we're ahead — planned subs") and is headed the same way in the Sub plan list. Optimizer mode dropped from the MS print header.
+
 ## Parallel Execution Map
 
 ```
