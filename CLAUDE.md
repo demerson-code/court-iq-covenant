@@ -134,9 +134,11 @@ Beyond those:
 
 ## Block status
 
-- Blocks 0–6 built and verified locally (26 Playwright tests). See `PLAN.md`.
-- Pending: GitHub repo + Pages (needs Derek's go-ahead), real Covenant
-  logo/colors (placeholder navy + "C" mark in place), iPad device check.
+- Live on GitHub Pages since 2026-09-05 (public repo demerson-code/court-iq-covenant,
+  Pages from main / root). 36 Playwright tests. See `PLAN.md` for the
+  round-by-round history after the coach's first look.
+- Pending: real Covenant logo/colors (placeholder navy + "C" mark in place),
+  iPad device check, the coach's league sub cap.
 
 ## Libero
 

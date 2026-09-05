@@ -1,6 +1,6 @@
 # Court IQ — Covenant · v1 Implementation Plan
 
-**Plan dated**: 2026-09-05 · **Status**: Blocks 0–6 built locally, 26 tests green. Not yet on GitHub (0.1's `gh repo create` awaits approval); 3.4 real logo/colors pending; 6.4 device check pending · **Source repo**: `court-iq-college` (fork point `b66e0d5`)
+**Plan dated**: 2026-09-05 · **Status**: LIVE 2026-09-05 at https://demerson-code.github.io/court-iq-covenant/ (v2026.09.05-15, 36 tests). Pending: 3.4 real logo/colors; 6.4 real-iPad check; the coach's league sub cap · **Source repo**: `court-iq-college` (fork point `b66e0d5`)
 **Target repo**: `court-iq-covenant` (new) · **Live (once created)**: https://demerson-code.github.io/court-iq-covenant/ · **Preview**: port 3470
 
 Untracked by intent — this file owns per-block scope. `CLAUDE.md` in the new repo will point here.
