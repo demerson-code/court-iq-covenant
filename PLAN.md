@@ -538,7 +538,7 @@ Eligible starters to sub out: everyone on the floor **except** the libero, the s
 
 Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench player in that order pick the eligible, still-unsubbed starter whose swap costs the least rotation strength across her 3 back-row rotations. Stop when the next swap would exceed `subsPerSet`.
 
-- [ ] **4.1 — Span semantics for `applySubPatterns`.** `app.js:1161`: a pattern with `return` now covers rotations from `trigger.rotationIndex` up to but not including `return.rotationIndex` (wrapping mod 6). No `return` = single rotation (unchanged).
+- [x] **4.1 — Span semantics for `applySubPatterns`.** `app.js:1161`: a pattern with `return` now covers rotations from `trigger.rotationIndex` up to but not including `return.rotationIndex` (wrapping mod 6). No `return` = single rotation (unchanged).
   ```js
   function _patternActiveAt(pat, rotationIndex) {
     if (!pat || !pat.trigger || pat.trigger.event !== 'in') return false;
@@ -551,7 +551,7 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
   ```
   Replace the two `continue` checks in the loop with `if (!_patternActiveAt(pat, rotationIndex)) continue;`. Note in the commit: coach-authored templates with `return` (all three) now span as their descriptions always said.
 
-- [ ] **4.2 — The planner (pure).** After `arrangementSatisfiesOverrides`:
+- [x] **4.2 — The planner (pure).** After `arrangementSatisfiesOverrides`:
   ```js
   /* planEverybodyPlays: returns { patterns:[], subsUsed, subsCap, benchLeft:[] }.
      patterns are subPattern-shaped with auto:true so the rest of the app
@@ -617,9 +617,9 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
   }
   window.planEverybodyPlays = planEverybodyPlays;
   ```
-  `effectiveRotationWithLibero` (`app.js:2457`) currently lives in render code and takes `ruleset` — it is already pure; move it up beside `scoreRotation` and pass `level`.
+  `effectiveRotationWithLibero` is already pure and hoisted; left in place. **Discovered during build:** the libero picks her replacement by primary position, so an MB-primary *sub* in the back row was being swapped straight back out. `applySubPatterns` now inserts a shallow copy tagged `_sub`, and both libero-swap sites skip tagged players. Auto patterns are never persisted — `save()` and the share link filter them; Generate re-derives them.
 
-- [ ] **4.3 — Generate ignores auto patterns; display applies them.** `generateLineup` (`app.js:1295`): `const patterns = (lineupCfg.subPatterns || []).filter(p => !p.auto);`. Add `S.lineup.everybodyPlays` (default `true`; `applyLoadedState` reads it as `!== false`) and `S.lineup.planExclude` (`{ starterId: true }`, default `{}`); both persist and ride the share link (they're team config). `runGenerate` (`app.js:3463`):
+- [x] **4.3 — Generate ignores auto patterns; display applies them.** `generateLineup` (`app.js:1295`): `const patterns = (lineupCfg.subPatterns || []).filter(p => !p.auto);`. Add `S.lineup.everybodyPlays` (default `true`; `applyLoadedState` reads it as `!== false`) and `S.lineup.planExclude` (`{ starterId: true }`, default `{}`); both persist and ride the share link (they're team config). `runGenerate` (`app.js:3463`):
   ```js
   const result = generateLineup();
   S.result = result;
@@ -633,7 +633,7 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
   ```
   `renderRotationGrid` already applies all `subPatterns` — the plan shows up in the six cards with no change. Chip for a subbed-in player gets a "SUB" tag (extend `buildPlayerChip`).
 
-- [ ] **4.4 — Sub plan panel.** Replace `#subPatternsPanel` in `index.html` with:
+- [x] **4.4 — Sub plan panel.** Replace `#subPatternsPanel` in `index.html` with:
   ```html
   <details class="lb-panel" id="subPlanPanel" open>
     <summary>Sub plan <span class="lb-counter" id="subsCounter"></span> <button class="help-btn" data-help="sub-plan" type="button">?</button></summary>
@@ -647,7 +647,7 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
   ```
   `renderSubPlanPanel()` (replaces `renderSubPatternsPanel` as the thing `renderLineup` calls; the old function keeps rendering into `#subPatternsBody` for HS): each `auto` pattern → `<li>`: "**#12 Ava** in for **#4 Mia** · rotation 3, when Mia rotates to serve · out at rotation 6" with a ✕ that sets `S.lineup.planExclude[starterId] = true` and re-plans ("Don't sub Mia out"). A "Reset" link clears `planExclude`. `#subsCounter`: "8 of 18 subs". `#subPlanLeft`: "Still on the bench: Zoe, Kate — no subs left" or empty. Toggle unchecked → strip auto patterns, re-render.
 
-- [ ] **4.5 — Help copy** for `sub-plan`: three sentences on when a sub goes in (to serve), when she comes out (before she'd rotate to the net), and that the order is Attitude first.
+- [x] **4.5 — Help copy** for `sub-plan`: three sentences on when a sub goes in (to serve), when she comes out (before she'd rotate to the net), and that the order is Attitude first.
 
 - [ ] **Verify** — demo roster, 4-2: 5 bench players → 5 patterns, 10 subs; set Advanced sub cap to 4 → 2 patterns, hint names the three left out. Simple 6 with 6 players → empty plan, no error. `npm test` (planner tests land in Block 6; run existing now).
 

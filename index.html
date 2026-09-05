@@ -143,9 +143,20 @@
               <div class="lb-panel-body" id="liberoPanelBody"></div>
             </details>
 
-            <details class="lb-panel" id="subPatternsPanel">
-              <summary>Sub patterns <span class="lb-counter" id="subsCounter"></span></summary>
-              <div class="lb-panel-body" id="subPatternsBody"></div>
+            <details class="lb-panel" id="subPlanPanel" open>
+              <summary>Sub plan <span class="lb-counter" id="subsCounter"></span></summary>
+              <div class="lb-panel-body sub-plan-body">
+                <div class="sub-plan-head">
+                  <label class="settings-toggle plan-toggle"><input type="checkbox" id="everybodyPlaysToggle"> Get everyone in when we're ahead</label>
+                  <button class="help-btn" data-help="sub-plan" aria-label="How does the sub plan work?" type="button">?</button>
+                </div>
+                <ol class="sub-plan-list" id="subPlanList"></ol>
+                <p class="hint" id="subPlanLeft"></p>
+                <details class="lb-subpanel" id="subPatternsPanel" data-hs-only>
+                  <summary>Custom sub patterns</summary>
+                  <div id="subPatternsBody"></div>
+                </details>
+              </div>
             </details>
 
             <details class="lb-panel" id="pairingsPanel" data-hs-only>

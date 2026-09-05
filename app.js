@@ -175,14 +175,19 @@ function defaultLineup() {
   // optimizationMode: 'balanced' | 'best6' | 'sr' | 'serving'
   // overrides:        { rotationIndex, zone, playerId } — coach-pinned slots
   // liberoConfig:     { playerId|null, replaces:['MB'|'OPP'|...], servesInRotation: 0..5|null }
-  // subPatterns:      [{ id, out, in, trigger:{rotationIndex,event}, return?: {...} }]
+  // subPatterns:      [{ id, out, in, trigger:{rotationIndex,event}, return?: {...}, auto? }]
+  //                   auto:true = written by planEverybodyPlays; never persisted
   // pairings:         [{ a: playerId, b: playerId }] — both must be starters together
+  // everybodyPlays:   run the sub planner after every Generate
+  // planExclude:      { starterId: true } — starters the coach won't sub out
   return {
     optimizationMode: 'balanced',
     overrides: [],
     liberoConfig: { playerId: null, replaces: ['MB'], servesInRotation: null },
     subPatterns: [],
-    pairings: []
+    pairings: [],
+    everybodyPlays: true,
+    planExclude: {}
   };
 }
 
@@ -337,8 +342,10 @@ function save(opts = {}) {
       optimizationMode: S.lineup.optimizationMode,
       overrides: S.lineup.overrides,
       liberoConfig: S.lineup.liberoConfig,
-      subPatterns: S.lineup.subPatterns,
-      pairings: S.lineup.pairings
+      subPatterns: S.lineup.subPatterns.filter(p => !p.auto), // planned subs are re-derived on Generate
+      pairings: S.lineup.pairings,
+      everybodyPlays: S.lineup.everybodyPlays !== false,
+      planExclude: S.lineup.planExclude || {}
     },
     scrimmage: {
       teamCount: S.scrimmage.teamCount,
@@ -472,8 +479,10 @@ function applyLoadedState(data) {
       liberoConfig: data.lineup.liberoConfig && typeof data.lineup.liberoConfig === 'object'
         ? { ...defaultLineup().liberoConfig, ...data.lineup.liberoConfig }
         : defaultLineup().liberoConfig,
-      subPatterns: Array.isArray(data.lineup.subPatterns) ? data.lineup.subPatterns : [],
-      pairings: Array.isArray(data.lineup.pairings) ? data.lineup.pairings : []
+      subPatterns: Array.isArray(data.lineup.subPatterns) ? data.lineup.subPatterns.filter(p => p && !p.auto) : [],
+      pairings: Array.isArray(data.lineup.pairings) ? data.lineup.pairings : [],
+      everybodyPlays: data.lineup.everybodyPlays !== false,
+      planExclude: (data.lineup.planExclude && typeof data.lineup.planExclude === 'object') ? data.lineup.planExclude : {}
     };
   }
   if (data.scrimmage && typeof data.scrimmage === 'object') {
@@ -548,7 +557,7 @@ function encodeStateForUrl() {
     p: S.players.map(compactPlayer),
     w: SKILLS.map(k => S.weights[k] | 0),
     cfg: S.settings,
-    ln: S.lineup,
+    ln: { ...S.lineup, subPatterns: S.lineup.subPatterns.filter(p => !p.auto) },
     e: S.lastEdited || undefined
   };
   return b64urlEncode(JSON.stringify(compact));
@@ -1282,7 +1291,7 @@ function scoreRotation(rotation, mode, libero, ruleset, settings, system) {
 
   if (libero && libero.player) {
     const replaces = libero.replaces || ['MB'];
-    const idx = backRow.findIndex(p => p && replaces.includes(p.positions && p.positions[0]));
+    const idx = backRow.findIndex(p => p && !p._sub && replaces.includes(p.positions && p.positions[0]));
     if (idx >= 0) {
       // idx 2 == zone 1 (server). If libero would land at server slot and ruleset
       // disallows libero serving, skip the swap for that rotation (the original
@@ -1311,9 +1320,21 @@ function scoreRotation(rotation, mode, libero, ruleset, settings, system) {
   return sum;
 }
 
+/* A pattern with a `return` covers every rotation from trigger up to (not
+   including) return, wrapping past 6. Without `return` it fires in exactly
+   one rotation. */
+function _patternActiveAt(pat, rotationIndex) {
+  if (!pat || !pat.trigger || pat.trigger.event !== 'in') return false;
+  const start = pat.trigger.rotationIndex;
+  if (!pat.return || typeof pat.return.rotationIndex !== 'number') return start === rotationIndex;
+  const end = pat.return.rotationIndex;
+  for (let r = start, n = 0; r !== end && n < 6; r = (r + 1) % 6, n++) if (r === rotationIndex) return true;
+  return false;
+}
+
 /* applySubPatterns: pure transform — given a rotation and the patterns array
    plus this rotation's index (0..5), returns a new rotation reflecting any
-   pattern whose trigger fires at this index. */
+   pattern active at this index. */
 function applySubPatterns(rotation, patterns, rotationIndex) {
   if (!patterns || patterns.length === 0) return rotation;
   const out = {
@@ -1322,10 +1343,12 @@ function applySubPatterns(rotation, patterns, rotationIndex) {
     server: rotation.server
   };
   for (const pat of patterns) {
-    if (!pat || !pat.trigger || pat.trigger.rotationIndex !== rotationIndex) continue;
-    if (pat.trigger.event !== 'in') continue;
-    const outId = pat.out, inPlayer = pat.in;
-    if (!outId || !inPlayer) continue;
+    if (!_patternActiveAt(pat, rotationIndex)) continue;
+    const outId = pat.out;
+    if (!outId || !pat.in) continue;
+    // Shallow copy tagged _sub so the libero never displaces a player who
+    // was just subbed in (she'd never actually play). Comparisons are by id.
+    const inPlayer = { ...pat.in, _sub: true };
     const fIdx = out.frontRow.findIndex(p => p && p.id === outId);
     if (fIdx >= 0) { out.frontRow[fIdx] = inPlayer; continue; }
     const bIdx = out.backRow.findIndex(p => p && p.id === outId);
@@ -1395,6 +1418,91 @@ function arrangementSatisfiesOverrides(arrangement, overrides) {
   return true;
 }
 
+/* ===== Everybody-plays planner =====
+   A starter who begins at startOrder[i] serves in rotation i (zone 1) and
+   is back-row in rotations i, i+1, i+2, then front-row from i+3. The classic
+   middle-school sub — "she goes in to serve, plays the back row, comes out
+   before she'd rotate to the net" — is therefore: in at rotation i, out at
+   (i+3) % 6. Each swap costs 2 subs. One starter serves per rotation, so at
+   most one planned sub-in per rotation and at most 6 per plan.
+
+   Eligible starters: everyone on the floor except the libero, the setter
+   in 5-1, and the setter in 6-2 (she sets from the back). In 4-2 both
+   setters are eligible — the back-row one isn't setting.
+
+   Bench order: intangibles first, then skill. Each bench player takes the
+   still-unsubbed starter whose swap costs the least rotation strength over
+   her three back-row rotations. Stops at the sub cap.
+
+   Returns { patterns:[], subsUsed, subsCap, benchLeft:[] }. Patterns are
+   subPattern-shaped with auto:true; the rest of the app treats them like
+   coach-authored ones. Pure — never mutates state. */
+function planEverybodyPlays(state, result) {
+  state = state || S;
+  const settings = state.settings || defaultSettings();
+  const level = currentLevel(settings);
+  const system = VALID_SYSTEMS.has(settings.system) ? settings.system : '4-2';
+  const mode = (state.lineup && state.lineup.optimizationMode) || 'balanced';
+  const cap = level.subsPerSet;
+  if (!result || !result.arrangement) return { patterns: [], subsUsed: 0, subsCap: cap, benchLeft: [] };
+
+  const startOrder = result.arrangement.startOrder;
+  const rotations = result.arrangement.rotations;
+  const libero = result.libero;
+  const onFloorIds = new Set(startOrder.filter(Boolean).map(p => p.id));
+  if (libero && libero.player) onFloorIds.add(libero.player.id);
+  const exclude = (state.lineup && state.lineup.planExclude) || {};
+  const bench = state.players
+    .filter(p => p.available && (p.name || '').trim() && !onFloorIds.has(p.id))
+    .sort((a, b) => (intangibleScore(b) - intangibleScore(a)) || (playerSkillRaw(b) - playerSkillRaw(a)));
+
+  const liberoReplaces = (libero && libero.replaces) || ['MB'];
+  const eligible = startOrder.map((p, i) => ({ p, i })).filter(({ p }) => {
+    if (!p || exclude[p.id]) return false;
+    const primary = (p.positions && p.positions[0]) || 'OH';
+    if (primary === 'S' && (system === '5-1' || system === '6-2')) return false;
+    return true;
+  });
+  // Libero keeps her spot: on a tie, sub the starters she isn't replacing.
+  eligible.sort((a, b) => {
+    const ar = liberoReplaces.includes(a.p.positions?.[0]) ? 1 : 0;
+    const br = liberoReplaces.includes(b.p.positions?.[0]) ? 1 : 0;
+    return ar - br;
+  });
+
+  const base = rotations.map(r => scoreRotation(effectiveRotationWithLibero(r, libero, level), mode, libero, level, settings, system));
+  const patterns = [];
+  const used = new Set();
+  let subsUsed = 0;
+  for (const sub of bench) {
+    if (subsUsed + 2 > cap) break;
+    let best = null;
+    for (const { p: starter, i } of eligible) {
+      if (used.has(starter.id)) continue;
+      const pat = {
+        id: 'auto_' + starter.id + '_' + sub.id,
+        out: starter.id, in: sub,
+        trigger: { rotationIndex: i, event: 'in' },
+        return:  { rotationIndex: (i + 3) % 6, event: 'in' },
+        auto: true
+      };
+      let cost = 0;
+      for (let k = 0; k < 3; k++) {
+        const r = (i + k) % 6;
+        const eff = effectiveRotationWithLibero(applySubPatterns(rotations[r], [pat], r), libero, level);
+        cost += base[r] - scoreRotation(eff, mode, libero, level, settings, system);
+      }
+      if (!best || cost < best.cost) best = { pat, cost, starterId: starter.id };
+    }
+    if (!best) break;
+    used.add(best.starterId);
+    patterns.push(best.pat);
+    subsUsed += 2;
+  }
+  const planned = new Set(patterns.map(p => p.in.id));
+  return { patterns, subsUsed, subsCap: cap, benchLeft: bench.filter(p => !planned.has(p.id)) };
+}
+
 /* generateLineup: public entry. Returns the new-shape result that the lineup
    builder UI consumes directly (starters, arrangement, libero, score,
    perRotationScores, validation). Block 2's back-compat layer is gone. */
@@ -1449,7 +1557,8 @@ function generateLineup(state) {
     return { error: `No legal arrangement for ${system}`, starters: null, validation: 'arrangement-empty' };
   }
 
-  const patterns = lineupCfg.subPatterns || [];
+  // Planned (auto) subs are derived from the lineup, so they can't steer it.
+  const patterns = (lineupCfg.subPatterns || []).filter(p => !p.auto);
   const valid = arrangements.filter(a => arrangementSatisfiesOverrides(a, overrides));
   const pool = valid.length > 0 ? valid : arrangements;
   const overridesIgnored = valid.length === 0 && overrides.length > 0;
@@ -1825,6 +1934,8 @@ if (typeof window !== 'undefined') {
   window.scoreRotation = scoreRotation;
   window.scoreLineup = scoreLineup;
   window.applySubPatterns = applySubPatterns;
+  window.planEverybodyPlays = planEverybodyPlays;
+  window._patternActiveAt = _patternActiveAt;
   window.playerFitForRole = playerFitForRole;
   window.validRolesForPlayer = validRolesForPlayer;
   window.pickScrimmageTeams = pickScrimmageTeams;
@@ -2580,7 +2691,7 @@ function renderLineup() {
   }
   renderRotationGrid();
   renderLiberoPanel();
-  renderSubPatternsPanel();
+  renderSubPlanPanel();
   renderPairingsPanel();
   renderLineupBreakdown();
   renderBench();
@@ -2618,6 +2729,7 @@ function renderRotationGrid() {
     // Apply libero swap and any sub patterns to compute the on-floor 6.
     const afterSubs = applySubPatterns(rot, patterns, idx);
     const effective = effectiveRotationWithLibero(afterSubs, r.libero, ruleset);
+    const subbedIn = new Set(patterns.filter(p => p.in && _patternActiveAt(p, idx)).map(p => p.in.id));
 
     const court = el('div', { cls: 'rot-court' });
     // Zones drawn left-to-right, top row 4-3-2, bottom row 5-6-1.
@@ -2633,7 +2745,7 @@ function renderRotationGrid() {
       if (isLibero) cellCls.push('rot-zone-libero');
 
       const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${ZONE_LABELS[z]}` });
-      const chip = buildPlayerChip(player, idx, z);
+      const chip = buildPlayerChip(player, idx, z, player && subbedIn.has(player.id));
       const cell = el('div', {
         cls: cellCls.join(' '),
         dataset: { rotIdx: String(idx), zone: String(z) }
@@ -2649,7 +2761,7 @@ function effectiveRotationWithLibero(rotation, libero, ruleset) {
   if (!libero || !libero.player) return rotation;
   const replaces = libero.replaces || ['MB'];
   const backRow = rotation.backRow.slice();
-  const idx = backRow.findIndex(p => p && replaces.includes(p.positions && p.positions[0]));
+  const idx = backRow.findIndex(p => p && !p._sub && replaces.includes(p.positions && p.positions[0]));
   if (idx < 0) return rotation;
   const isServerSlot = idx === 2;
   const liberoCanServe = ruleset && ruleset.liberoMayServe;
@@ -2674,13 +2786,14 @@ function isZoneOverridden(rotIdx, zone) {
   return (S.lineup.overrides || []).some(o => o.rotationIndex === rotIdx && o.zone === zone);
 }
 
-function buildPlayerChip(player, rotIdx, zone) {
+function buildPlayerChip(player, rotIdx, zone, isSub = false) {
   if (!player) {
     return el('div', { cls: 'rot-chip rot-chip-empty', text: '—' });
   }
   const firstName = (player.name || '?').split(' ')[0];
   const role = (player.positions && player.positions[0]) || '';
   const cls = ['rot-chip', `rot-chip-${role || 'OH'}`];
+  if (isSub) cls.push('rot-chip-sub');
   // Jersey first: at the bench a coach knows girls by number.
   const chipName = (S.settings?.showJersey && player.jersey) ? `#${player.jersey} ${firstName}` : firstName;
   const chip = el('div', {
@@ -2692,7 +2805,7 @@ function buildPlayerChip(player, rotIdx, zone) {
     }
   }, [
     el('span', { cls: 'rot-chip-name', text: chipName }),
-    el('span', { cls: 'rot-chip-role', text: roleLabel(role) })
+    el('span', { cls: 'rot-chip-role', text: isSub ? 'SUB' : roleLabel(role) })
   ]);
   return chip;
 }
@@ -2783,16 +2896,7 @@ function renderSubPatternsPanel() {
   body.replaceChildren();
   const settings = S.settings || defaultSettings();
   const ruleset = currentLevel(settings);
-  const patterns = S.lineup.subPatterns;
-
-  // Subs counter
-  const subsUsed = patterns.reduce((n, p) => n + (p.return ? 2 : 1), 0);
-  const counter = $('#subsCounter');
-  if (counter) {
-    counter.textContent = `${subsUsed} / ${ruleset.subsPerSet}`;
-    counter.classList.toggle('over', subsUsed > ruleset.subsPerSet);
-  }
-
+  const patterns = S.lineup.subPatterns.filter(p => !p.auto);
   patterns.forEach((pat, i) => body.appendChild(buildSubPatternCard(pat, i)));
 
   // Add pattern row
@@ -2868,7 +2972,7 @@ function buildSubPatternCard(pat, idx) {
     text: '✕',
     on: {
       click: () => {
-        S.lineup.subPatterns.splice(idx, 1);
+        S.lineup.subPatterns = S.lineup.subPatterns.filter(x => x !== pat);
         save();
         renderSubPatternsPanel();
         scheduleRegen();
@@ -2883,6 +2987,83 @@ function buildSubPatternCard(pat, idx) {
     delBtn
   ]));
   return card;
+}
+
+/* Sub plan panel: the everybody-plays list, the subs counter (auto + custom),
+   and — at HS — the custom sub-pattern editor underneath. */
+function renderSubPlanPanel() {
+  const list = $('#subPlanList');
+  if (!list) return;
+  list.replaceChildren();
+  const level = currentLevel();
+  const all = S.lineup.subPatterns || [];
+  const subsUsed = all.reduce((n, p) => n + (p.return ? 2 : 1), 0);
+  const counter = $('#subsCounter');
+  if (counter) {
+    counter.textContent = `${subsUsed} of ${level.subsPerSet} subs`;
+    counter.classList.toggle('over', subsUsed > level.subsPerSet);
+  }
+  const toggle = $('#everybodyPlaysToggle');
+  if (toggle) toggle.checked = S.lineup.everybodyPlays !== false;
+
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  const tag = p => (S.settings?.showJersey && p.jersey) ? `#${p.jersey} ${p.name}` : (p.name || '(unnamed)');
+  const auto = all.filter(p => p.auto);
+  const left = $('#subPlanLeft');
+
+  if (S.lineup.everybodyPlays === false) {
+    list.appendChild(el('li', { cls: 'sub-plan-empty', text: 'Turn this on and the plan fills in after Generate.' }));
+    if (left) left.textContent = '';
+    return;
+  }
+  if (auto.length === 0) {
+    list.appendChild(el('li', { cls: 'sub-plan-empty', text: 'Everyone available is already on the floor.' }));
+  }
+  auto.forEach(pat => {
+    const starter = byId.get(pat.out);
+    const inP = pat.in;
+    if (!starter || !inP) return;
+    const row = el('li', { cls: 'sub-plan-row' });
+    row.appendChild(el('div', { cls: 'sub-plan-who' }, [
+      el('strong', { text: tag(inP) }),
+      ' in for ',
+      el('strong', { text: tag(starter) })
+    ]));
+    row.appendChild(el('div', { cls: 'sub-plan-when', text:
+      `In at rotation ${pat.trigger.rotationIndex + 1} — when ${starter.name.split(' ')[0]} rotates back to serve · out at rotation ${pat.return.rotationIndex + 1}` }));
+    row.appendChild(el('button', {
+      cls: 'btn btn-secondary btn-tiny sub-plan-x',
+      text: '✕',
+      title: `Keep ${starter.name} in — don't sub her out`,
+      attrs: { 'aria-label': `Keep ${starter.name} in` },
+      on: { click: () => {
+        S.lineup.planExclude = { ...(S.lineup.planExclude || {}), [starter.id]: true };
+        save();
+        runGenerate();
+      } }
+    }));
+    list.appendChild(row);
+  });
+
+  if (left) {
+    left.replaceChildren();
+    const plan = S.plan;
+    const excluded = Object.keys(S.lineup.planExclude || {}).map(id => byId.get(id)).filter(Boolean);
+    if (plan && plan.benchLeft.length) {
+      left.appendChild(document.createTextNode(
+        `Still on the bench: ${plan.benchLeft.map(p => p.name).join(', ')} — no subs left under the ${level.subsPerSet}-sub limit (change it under Advanced).`));
+    }
+    if (excluded.length) {
+      if (left.childNodes.length) left.appendChild(el('br'));
+      left.appendChild(document.createTextNode(`Kept in: ${excluded.map(p => p.name).join(', ')}. `));
+      left.appendChild(el('button', {
+        cls: 'link-btn', text: 'Reset',
+        on: { click: () => { S.lineup.planExclude = {}; save(); runGenerate(); } }
+      }));
+    }
+  }
+
+  renderSubPatternsPanel();
 }
 
 /* Pairings panel: each entry forces both named players to start together
@@ -3577,6 +3758,11 @@ function init() {
     });
   }
 
+  $('#everybodyPlaysToggle')?.addEventListener('change', e => {
+    S.lineup.everybodyPlays = !!e.target.checked;
+    save();
+    if (S.result) runGenerate();
+  });
   bindLevelOverride('#advSubsPerSet', 'subsPerSet', t => Math.max(6, Math.min(30, parseInt(t.value, 10) || 18)));
   bindLevelOverride('#advLeadThreshold', 'leadThreshold', t => Math.max(0, Math.min(15, parseInt(t.value, 10) || 0)));
   bindLevelOverride('#advLiberoServe', 'liberoMayServe', t => !!t.checked);
@@ -3727,6 +3913,14 @@ function init() {
 function runGenerate(opts = {}) {
   const result = generateLineup();
   S.result = result;
+  // Everybody-plays: derive the sub plan from the fresh lineup. Auto patterns
+  // are replaced wholesale; coach-authored ones are untouched.
+  S.lineup.subPatterns = S.lineup.subPatterns.filter(p => !p.auto);
+  S.plan = null;
+  if (!result.error && S.lineup.everybodyPlays !== false) {
+    S.plan = planEverybodyPlays(S, result);
+    S.lineup.subPatterns.push(...S.plan.patterns);
+  }
   const printBtn = $('#printLineupBtn');
   if (printBtn) printBtn.hidden = !!(result.error || !result.arrangement);
   if (result.error) {

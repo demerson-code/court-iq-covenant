@@ -2276,3 +2276,42 @@ body.dragging-court .bench-drop-zone { display: block; }
 .brand:focus-within { white-space: normal; overflow: visible; }
 .topbar-row .icon-btn { flex-shrink: 0; }
 .topbar-row .icon-btn + .icon-btn { margin-left: 0; }
+
+/* ===== Block 4: sub plan ===== */
+.sub-plan-body { display: flex; flex-direction: column; gap: 10px; }
+.sub-plan-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plan-toggle { color: var(--text); font-size: 14px; }
+.plan-toggle input[type="checkbox"] { accent-color: var(--brand); width: 18px; height: 18px; }
+.sub-plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: plan; }
+.sub-plan-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "n who x" "n when x";
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  counter-increment: plan;
+}
+.sub-plan-row::before {
+  content: counter(plan);
+  grid-area: n;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-size: 13px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sub-plan-who { grid-area: who; font-size: 14px; color: var(--text); }
+.sub-plan-when { grid-area: when; font-size: 12px; color: var(--text-mute); }
+.sub-plan-x { grid-area: x; min-width: 36px; }
+.sub-plan-empty { font-size: 13px; color: var(--text-mute); padding: 6px 2px; }
+.lb-subpanel { margin-top: 6px; }
+.lb-subpanel > summary { font-size: 13px; font-weight: 700; color: var(--text-mute); cursor: pointer; padding: 6px 0; }
+.link-btn { background: none; border: none; color: var(--brand); font-weight: 700; cursor: pointer; padding: 0; font-size: inherit; text-decoration: underline; }
+.rot-chip-sub { border-style: dashed; background: rgba(var(--brand-rgb), 0.06); }
+.rot-chip-sub .rot-chip-role { color: var(--brand); font-weight: 800; }
