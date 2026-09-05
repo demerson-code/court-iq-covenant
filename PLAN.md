@@ -814,6 +814,10 @@ Derek: "I don't like the pin system." Pins were the college optimizer's memory o
 - [x] The board renders on load; the libero chip isn't draggable (change her under Libero).
 - [x] Pins: `overrides` stays in state but is always empty; Clear pins button, PINNED labels and the pin status line are gone. 28 tests.
 
+## Round 6 — libero panel (2026-09-05)
+
+- [x] Derek: "What is the libero widget doing? We don't have all those positions." Panel rewritten in coach words: a one-line explanation, the libero picker (libero-position players first), **Comes in for** with only this level's positions (Setter / Middle / Outside at MS), and a line saying whether she may serve (pointing at the Advanced toggle). The "Serves in rotation" dropdown was dead — `servesInRotation` was stored but never read — so it's gone. Data shape unchanged.
+
 ## Parallel Execution Map
 
 ```

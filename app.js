@@ -3176,10 +3176,17 @@ function renderLiberoPanel() {
   body.replaceChildren();
   const cfg = S.lineup.liberoConfig;
   const settings = S.settings || defaultSettings();
-  const ruleset = currentLevel(settings);
+  const level = currentLevel(settings);
 
-  // Player picker — anyone with L in their valid roles (Rec accepts anyone)
-  const liberos = S.players.filter(p => validRolesForPlayer(p, ruleset).includes('L'));
+  body.appendChild(el('p', { cls: 'hint lb-hint', text:
+    'The libero plays the back row only. She comes in for one of the players below when that player rotates to the back row, and swaps out when that player rotates back up to the net. No sub is used.' }));
+
+  // Player picker — libero-position players first, then everyone else.
+  const liberoFirst = S.players.slice().sort((a, b) => {
+    const al = (a.positions || []).includes('L') ? 0 : 1;
+    const bl = (b.positions || []).includes('L') ? 0 : 1;
+    return al - bl || (a.name || '').localeCompare(b.name || '');
+  });
   const picker = el('select', {
     on: {
       change: e => {
@@ -3190,21 +3197,23 @@ function renderLiberoPanel() {
     }
   });
   const noneOpt = document.createElement('option');
-  noneOpt.value = ''; noneOpt.textContent = '— auto-pick from L starter —';
+  noneOpt.value = ''; noneOpt.textContent = '— whoever is marked Libero —';
   picker.appendChild(noneOpt);
-  liberos.forEach(p => {
+  liberoFirst.forEach(p => {
     const o = document.createElement('option');
-    o.value = p.id; o.textContent = p.name || '(unnamed)';
+    o.value = p.id;
+    o.textContent = (p.name || '(unnamed)') + ((p.positions || []).includes('L') ? ' · libero' : '');
     picker.appendChild(o);
   });
   picker.value = cfg.playerId || '';
-  body.appendChild(el('div', { cls: 'lb-row' }, [
-    el('label', { text: 'Player' }), picker
-  ]));
+  body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'Libero' }), picker]));
 
-  // Replaces (multi via checkboxes)
+  // Comes in for — only this level's positions, in coach words. Roles the
+  // coach checked at another level stay checked (and visible) so nothing is lost.
+  const choices = level.roles.filter(r => r !== 'L');
+  (cfg.replaces || []).forEach(r => { if (r !== 'L' && !choices.includes(r)) choices.push(r); });
   const replacesWrap = el('div', { cls: 'lb-replaces-wrap' });
-  ['MB', 'OPP', 'OH', 'DS', 'S'].forEach(role => {
+  choices.forEach(role => {
     const cb = el('input', { attrs: { type: 'checkbox', value: role } });
     cb.checked = (cfg.replaces || ['MB']).includes(role);
     cb.addEventListener('change', () => {
@@ -3214,36 +3223,14 @@ function renderLiberoPanel() {
       save();
       scheduleRegen();
     });
-    replacesWrap.appendChild(el('label', { cls: 'lb-replaces-chip' }, [cb, role]));
+    replacesWrap.appendChild(el('label', { cls: 'lb-replaces-chip' }, [cb, roleLabel(role)]));
   });
-  body.appendChild(el('div', { cls: 'lb-row' }, [
-    el('label', { text: 'Replaces (back row)' }), replacesWrap
-  ]));
+  body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'Comes in for' }), replacesWrap]));
 
-  // Serves in rotation (only if ruleset allows)
-  const serveLabel = el('label', { text: 'Serves in rotation' });
-  const serveSel = el('select', {
-    on: {
-      change: e => {
-        cfg.servesInRotation = e.target.value === '' ? null : Number(e.target.value);
-        save();
-        scheduleRegen();
-      }
-    }
-  });
-  if (!ruleset.liberoMayServe) {
-    serveSel.disabled = true;
-  }
-  const noneServe = document.createElement('option');
-  noneServe.value = ''; noneServe.textContent = ruleset.liberoMayServe ? '— none —' : '(libero may not serve in this ruleset)';
-  serveSel.appendChild(noneServe);
-  for (let i = 0; i < 6; i++) {
-    const o = document.createElement('option');
-    o.value = String(i); o.textContent = `Rotation ${i + 1}`;
-    serveSel.appendChild(o);
-  }
-  serveSel.value = cfg.servesInRotation == null ? '' : String(cfg.servesInRotation);
-  body.appendChild(el('div', { cls: 'lb-row' }, [serveLabel, serveSel]));
+  body.appendChild(el('p', { cls: 'hint lb-hint', text:
+    level.liberoMayServe
+      ? 'She may serve (Advanced → Libero may serve), so she stays in when her swap lands on the serving spot.'
+      : 'She may not serve (Advanced → Libero may serve), so she sits out the rotation where her swap would land on the serving spot.' }));
 }
 
 /* Sub patterns: list current patterns + a template picker. Each pattern has
