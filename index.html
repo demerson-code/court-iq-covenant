@@ -40,14 +40,12 @@
           <option value="hs">High School</option>
         </select>
       </label>
-      <label class="settings-field"><span>System</span>
+      <label class="settings-field"><span>System <button class="help-btn help-btn-topbar" data-help="systems" aria-label="Which system?" type="button">?</button></span>
         <select id="systemSelect">
           <option value="5-1" data-system="5-1">5-1</option>
           <option value="6-2" data-system="6-2">6-2</option>
         </select>
       </label>
-      <label class="settings-toggle"><input type="checkbox" id="jerseyToggle"> Jersey #</label>
-      <label class="settings-toggle" data-hs-only><input type="checkbox" id="setterTempoToggle"> Setter tempo</label>
     </div>
   </header>
 
@@ -60,10 +58,6 @@
     <button class="tab active" data-tab="roster" role="tab">
       <span class="tab-icon">👥</span>
       <span class="tab-label">Roster</span>
-    </button>
-    <button class="tab" data-tab="weights" role="tab">
-      <span class="tab-icon">⚖️</span>
-      <span class="tab-label">Weights</span>
     </button>
     <button class="tab" data-tab="lineup" role="tab">
       <span class="tab-icon">🏐</span>
@@ -97,22 +91,9 @@
       <button class="btn btn-add btn-add-player" id="addPlayerBtn">+ Add Player</button>
       <div class="empty-state" id="rosterEmpty" hidden>
         <p>No players yet — tap <strong>+ Add Player</strong> below to start your roster.</p>
-        <p class="hint">Or load a 13-player demo to try out the lineup builder:</p>
+        <p class="hint">Or load a 12-player demo team to try out the lineup builder:</p>
         <button class="btn btn-secondary" id="loadDemoBtn" type="button">Load Demo Roster</button>
       </div>
-    </section>
-
-    <!-- WEIGHTS TAB -->
-    <section class="tab-panel" id="weightsTab" role="tabpanel">
-      <div class="section-header">
-        <div>
-          <h2 class="label-with-help">Skill Weights <button class="help-btn" data-help="skills-key" aria-label="What do these skills mean?" type="button">?</button></h2>
-          <p class="hint">How important is each skill? (1 = not much, 10 = critical)</p>
-        </div>
-        <button class="btn btn-secondary" id="resetWeightsBtn">Reset</button>
-      </div>
-      <div class="weight-list" id="weightList"></div>
-      <p class="hint">Optimization mode (balanced / best 6 / serve-receive / serving) lives on the Lineup tab.</p>
     </section>
 
     <!-- LINEUP TAB -->
@@ -123,14 +104,6 @@
             <select id="systemSelectLineup">
               <option value="5-1" data-system="5-1">5-1</option>
               <option value="6-2" data-system="6-2">6-2</option>
-            </select>
-          </label>
-          <label class="lc-field"><span>Optimize for</span>
-            <select id="optimizationMode">
-              <option value="balanced">Balanced — all 6 rotations</option>
-              <option value="best6">Best 6 on floor</option>
-              <option value="sr">Best serve-receive</option>
-              <option value="serving">Best serving</option>
             </select>
           </label>
           <button class="btn btn-primary" id="generateBtn">⚡ Generate Lineup</button>
@@ -152,7 +125,7 @@
             <div class="lb-panel-body" id="subPatternsBody"></div>
           </details>
 
-          <details class="lb-panel" id="pairingsPanel">
+          <details class="lb-panel" id="pairingsPanel" data-hs-only>
             <summary>Pairings <span class="lb-counter" id="pairingsCounter"></span></summary>
             <div class="lb-panel-body" id="pairingsBody"></div>
           </details>
@@ -160,6 +133,35 @@
           <details class="lb-panel" id="lineupBreakdownPanel" open>
             <summary>Lineup breakdown</summary>
             <div class="lb-panel-body" id="lineupBreakdown"></div>
+          </details>
+
+          <details class="lb-panel" id="advancedPanel">
+            <summary>Advanced</summary>
+            <div class="lb-panel-body adv-body">
+              <div class="adv-grid">
+                <label class="adv-row"><span>Subs per set</span><input type="number" id="advSubsPerSet" min="6" max="30" inputmode="numeric"></label>
+                <label class="adv-row"><span>Sub in when we're up by</span><input type="number" id="advLeadThreshold" min="0" max="15" inputmode="numeric"></label>
+              </div>
+              <div class="adv-toggles">
+                <label class="settings-toggle"><input type="checkbox" id="advLiberoServe"> Libero may serve</label>
+                <label class="settings-toggle"><input type="checkbox" id="jerseyToggle"> Show jersey #</label>
+                <label class="settings-toggle" data-hs-only><input type="checkbox" id="setterTempoToggle"> Setter tempo</label>
+              </div>
+              <div data-hs-only>
+                <label class="lc-field"><span>Optimize for</span>
+                  <select id="optimizationMode">
+                    <option value="balanced">Balanced — all 6 rotations</option>
+                    <option value="best6">Best 6 on floor</option>
+                    <option value="sr">Best serve-receive</option>
+                    <option value="serving">Best serving</option>
+                  </select>
+                </label>
+              </div>
+              <h4 class="label-with-help adv-subhead">Skill weights <button class="help-btn" data-help="skills-key" aria-label="What do these skills mean?" type="button">?</button></h4>
+              <p class="hint">How much each skill matters on our team (1 = not much, 10 = critical).</p>
+              <div class="weight-list" id="weightList"></div>
+              <button class="btn btn-secondary btn-tiny" id="resetWeightsBtn" type="button">Reset weights</button>
+            </div>
           </details>
 
           <div class="bench-card lb-bench" id="benchCard">

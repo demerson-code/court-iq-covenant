@@ -2194,3 +2194,40 @@ body.dragging-court .bench-drop-zone { display: block; }
     print-color-adjust: exact;
   }
 }
+
+/* ===== Block 1: intangibles, Advanced panel ===== */
+.card-subhead {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-mute);
+  margin: 12px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.intangible-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 260px; }
+.adv-body { display: flex; flex-direction: column; gap: 12px; }
+.adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; }
+.adv-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.adv-row input[type="number"] {
+  width: 72px;
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+}
+.adv-row input[type="number"]:focus { border-color: var(--brand); outline: none; }
+.adv-toggles { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.adv-toggles .settings-toggle { color: var(--text); font-size: 14px; }
+.adv-toggles .settings-toggle input[type="checkbox"] { accent-color: var(--brand); }
+.adv-subhead { font-size: 14px; margin-top: 4px; }
+.help-btn-topbar { border-color: rgba(255,255,255,0.55); color: white; background: transparent; margin-left: 4px; width: 18px; height: 18px; font-size: 11px; }
+.help-btn-topbar:hover { background: rgba(255,255,255,0.2); }

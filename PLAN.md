@@ -273,7 +273,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
 
 ### Tasks
 
-- [ ] **1.1 — Labels.** `app.js:27-34`, `77-84`:
+- [x] **1.1 — Labels.** `app.js:27-34`, `77-84`:
   ```js
   const ROLE_LABELS = { OH: 'Hitter', MB: 'Middle', S: 'Setter', OPP: 'Right Side', L: 'Libero', DS: 'Defensive Specialist' };
   // HS shows the fuller names; MS shows the plain ones. Keys never change.
@@ -289,7 +289,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   Replace `ROLE_LABELS[...]` reads in render code (`app.js:869, 2160-2200, 2836`) with `roleLabel(...)`. Option text in `index.html` system selects uses the `SYSTEM_LABELS` strings.
 
-- [ ] **1.2 — Position picker honours the level.** In `buildRosterFields` (`app.js:2154`) replace both `ROLES.forEach` loops with:
+- [x] **1.2 — Position picker honours the level.** In `buildRosterFields` (`app.js:2154`) replace both `ROLES.forEach` loops with:
   ```js
   const visible = currentLevel().roles.slice();
   // Never hide a role a player already has (e.g. after HS → MS) — show it, so nothing is silently lost.
@@ -299,14 +299,14 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   Option text drops the `OH — ` prefix at MS (the code is jargon); keep `${r} — ${label}` at HS.
   Height row and Hand row: `heightRow.hidden = !isHS(); handRow.hidden = !isHS();`. Jersey row: already toggled by `showJersey`, now default true.
 
-- [ ] **1.3 — Blocking scale.** `playerFitForRole` (`app.js:805`), inside the skill loop:
+- [x] **1.3 — Blocking scale.** `playerFitForRole` (`app.js:805`), inside the skill loop:
   ```js
   let w = weights[skill] || 0;
   if (skill === 'blocking') w *= currentLevel(settings).blockingScale;
   ```
   Cache key must include the level: `${player.id}|${role}|${settings.level}|${settings.showSetterTempo ? 1 : 0}`.
 
-- [ ] **1.4 — Intangibles.** Constants after `SKILL_LABELS_SHORT` (`app.js:52`):
+- [x] **1.4 — Intangibles.** Constants after `SKILL_LABELS_SHORT` (`app.js:52`):
   ```js
   // Rated like skills, kept apart from them: they never feed lineup score
   // directly. They order the bench in the sub plan and break ties between
@@ -338,7 +338,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   `buildIntangibleGrid` reuses `buildSkillCell` with `INTANGIBLE_LABELS` — refactor `buildSkillCell(skillsObj, skill, onChange, labels = SKILL_LABELS_SHORT)` so it takes a label map. `avgSkillDisplay` unchanged (skills only).
 
-- [ ] **1.5 — Kill the Weights tab, add Advanced.** `index.html`: delete the Weights `<button class="tab">` and `#weightsTab` section. `VALID_TABS` → `new Set(['roster','lineup','scrimmage','bench'])` ('bench' arrives in Block 5; a missing panel is harmless). On the Lineup tab, after `#lineupBreakdownPanel`:
+- [x] **1.5 — Kill the Weights tab, add Advanced.** `index.html`: delete the Weights `<button class="tab">` and `#weightsTab` section. `VALID_TABS` → `new Set(['roster','lineup','scrimmage','bench'])` ('bench' arrives in Block 5; a missing panel is harmless). On the Lineup tab, after `#lineupBreakdownPanel`:
   ```html
   <details class="lb-panel" id="advancedPanel">
     <summary>Advanced</summary>
@@ -378,7 +378,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   Level change handler (0.3) also calls `repaintOverrides.forEach(f => f && f())`. `renderWeights()` still targets `#weightList` — unchanged.
 
-- [ ] **1.6 — Help text rewrite.** Replace the three `HELP` entries (`app.js:594-636`) with MS wording and add three:
+- [x] **1.6 — Help text rewrite.** Replace the three `HELP` entries (`app.js:594-636`) with MS wording and add three:
   - `skills-key`: same six, one plain sentence each ("Serve Receive — passing the other team's serve up to the setter"). Callout: rate against *our team*.
   - `intangibles`: "These don't change who starts. They decide who comes off the bench first and break ties."
   - `systems`: 4-2 / Simple 6 / 5-1 in one sentence each. HS-only paragraph for 6-2 appended when `isHS()` (build the body array at open time).
@@ -386,7 +386,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   - `optimization-mode`, `rotation-strength`: keep, shorten by half.
   Help buttons: add `makeHelpButton('intangibles')` beside the Intangibles subhead, `makeHelpButton('systems')` beside the System select.
 
-- [ ] **1.7 — Demo roster.** Replace `DEMO_ROSTER` (`app.js:1682-1696`) with 12 MS-shaped players: 2 S, 4 OH, 3 MB, 1 L, 2 OH/L-secondary. Skills 3-8 range, intangibles varied (two players deliberately identical on skills, differing on attitude — reused by the Block 6 tie fixture). Update `#rosterEmpty` hint: "Or load a 12-player demo team".
+- [x] **1.7 — Demo roster.** Replace `DEMO_ROSTER` (`app.js:1682-1696`) with 12 MS-shaped players: 2 S, 4 OH, 3 MB, 1 L, 2 OH/L-secondary. Skills 3-8 range, intangibles varied (two players deliberately identical on skills, differing on attitude — reused by the Block 6 tie fixture). Update `#rosterEmpty` hint: "Or load a 12-player demo team".
 
 - [ ] **Verify**
   ```bash

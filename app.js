@@ -24,13 +24,15 @@
 
 /* ===== Constants ===== */
 const ROLES = ['OH', 'MB', 'S', 'OPP', 'L', 'DS'];
-const ROLE_LABELS = {
-  OH: 'Outside Hitter',
-  MB: 'Middle Blocker',
-  S: 'Setter',
-  OPP: 'Opposite',
-  L: 'Libero',
-  DS: 'Defensive Specialist'
+// MS shows the plain names; HS shows the fuller ones. Keys never change.
+const ROLE_LABELS = { OH: 'Hitter', MB: 'Middle', S: 'Setter', OPP: 'Right Side', L: 'Libero', DS: 'Defensive Specialist' };
+const ROLE_LABELS_HS = { ...ROLE_LABELS, OH: 'Outside Hitter', MB: 'Middle Blocker' };
+function roleLabel(r) { return (isHS() ? ROLE_LABELS_HS : ROLE_LABELS)[r] || r; }
+const SYSTEM_LABELS = {
+  '4-2':    '4-2 — setter sets from the front row',
+  'simple': 'Simple 6 — best six, normal rotation',
+  '5-1':    '5-1 — one setter, all six rotations',
+  '6-2':    '6-2 — setters set from the back row'
 };
 
 const SKILLS = ['serving', 'serveReceive', 'defense', 'hitting', 'blocking', 'setting'];
@@ -51,6 +53,21 @@ const SKILL_LABELS_SHORT = {
   setting: 'Set'
 };
 const SETTER_TEMPO_KEY = 'setterTempo'; // toggleable 7th skill, S-only
+
+// Rated like skills, kept apart from them: they never feed lineup score
+// directly. They order the bench in the sub plan and break ties between
+// near-equal starters. Speed/athleticism lives here rather than in skills
+// because it's a trait, not a volleyball skill.
+const INTANGIBLES = ['attitude', 'athleticism'];
+const INTANGIBLE_LABELS = { attitude: 'Attitude', athleticism: 'Speed / Athleticism' };
+const INTANGIBLE_LABELS_SHORT = { attitude: 'Attitude', athleticism: 'Speed' };
+const TIEBREAK_WEIGHT = 0.001; // a 10-vs-1 intangible gap (< 0.01) can never beat a 0.05 skill gap
+function defaultIntangibles() { const o = {}; INTANGIBLES.forEach(k => o[k] = 5); return o; }
+function intangibleScore(p) {
+  const it = (p && p.intangibles) || {};
+  return INTANGIBLES.reduce((a, k) => a + (it[k] || 5), 0) / INTANGIBLES.length;
+}
+function tiebreak(p) { return intangibleScore(p) * TIEBREAK_WEIGHT; }
 
 // One dial, four effects: which positions the coach sees, which systems
 // the picker offers, which controls are visible, and the rule preset.
@@ -108,12 +125,12 @@ const ROLE_SKILL_WEIGHTS = {
 // Setter tempo is added at full weight (5.0) for S-role lineup scoring when settings.showSetterTempo is on.
 
 const POSITION_NAMES = {
-  1: 'Server',
-  2: 'Setter',
-  3: 'Mid Front',
-  4: 'Outside',
+  1: 'Right Back (serves)',
+  2: 'Right Front',
+  3: 'Middle Front',
+  4: 'Left Front',
   5: 'Left Back',
-  6: 'Mid Back'
+  6: 'Middle Back'
 };
 
 // safeStorage: localStorage with try/catch + in-memory fallback for mobile Safari private mode.
@@ -201,7 +218,7 @@ let S = {
   currentTab: 'roster'      // last-active tab; restored on reload
 };
 
-const VALID_TABS = new Set(['roster', 'weights', 'lineup', 'scrimmage']);
+const VALID_TABS = new Set(['roster', 'lineup', 'scrimmage', 'bench']); // 'bench' arrives in Block 5
 const VALID_SYSTEMS = new Set(['5-1', '6-2']); // Block 2 adds '4-2' and 'simple'
 
 const SORT_MODES = new Set(['avg-desc', 'avg-asc', 'name-asc', 'name-desc']);
@@ -226,6 +243,7 @@ function createPlayer(name = '', positions = ['OH', null]) {
     hand: 'R',                  // 'R' | 'L'
     positions,                  // [primary, secondary|null], values from ROLES
     skills: defaultSkills(),
+    intangibles: defaultIntangibles(),
     setterTempo: 5,             // only surfaced when settings.showSetterTempo and primary === 'S'
     available: true
   };
@@ -252,10 +270,11 @@ function migratePlayer(p) {
     blocking:     5,                           // no analog in old data
     setting:      (old.setting | 0) || 5
   };
-  // attitude / communication: no analog, drop.
+  // attitude carries over as an intangible; communication has no analog.
   return {
     ...p,
     skills: newSkills,
+    intangibles: { ...defaultIntangibles(), attitude: (old.attitude | 0) || 5 },
     jersey: p.jersey || '',
     height: p.height || '',
     hand: p.hand || 'R',
@@ -307,6 +326,7 @@ function save(opts = {}) {
       hand: p.hand || 'R',
       positions: p.positions || ['OH', null],
       skills: p.skills,
+      intangibles: p.intangibles || defaultIntangibles(),
       setterTempo: typeof p.setterTempo === 'number' ? p.setterTempo : 5,
       available: p.available
     })),
@@ -420,6 +440,7 @@ function applyLoadedState(data) {
           ? [migrated.positions[0] || 'OH', migrated.positions[1] || null]
           : ['OH', null],
         skills: { ...defaultSkills(), ...(migrated.skills || {}) },
+        intangibles: { ...defaultIntangibles(), ...(migrated.intangibles || {}) },
         setterTempo: typeof migrated.setterTempo === 'number' ? migrated.setterTempo : 5,
         available: migrated.available !== false
       };
@@ -501,8 +522,9 @@ function sortByMode(items, mode, getName, getAvg) {
    Legacy decoder accepts the Block 1 ad-hoc shape (object-form players with
    n/s/a/pos/h/ht/j/st keys) so any link generated before v2 still loads. */
 const SHARE_VERSION = 2;
-// Player tuple indices: [id, name, positions, hand, height, jersey, skillsArr, setterTempo, available]
-const PT = { ID:0, NAME:1, POS:2, HAND:3, HEIGHT:4, JERSEY:5, SKILLS:6, TEMPO:7, AVAIL:8 };
+// Player tuple indices: [id, name, positions, hand, height, jersey, skillsArr, setterTempo, available, intangiblesArr]
+// Index 9 was added for Covenant; a college-era link without it decodes to all-5s.
+const PT = { ID:0, NAME:1, POS:2, HAND:3, HEIGHT:4, JERSEY:5, SKILLS:6, TEMPO:7, AVAIL:8, INTANG:9 };
 
 function compactPlayer(p) {
   return [
@@ -514,7 +536,8 @@ function compactPlayer(p) {
     p.jersey || '',
     SKILLS.map(k => p.skills[k] | 0),
     typeof p.setterTempo === 'number' ? p.setterTempo : 5,
-    p.available ? 1 : 0
+    p.available ? 1 : 0,
+    INTANGIBLES.map(k => ((p.intangibles || {})[k] | 0) || 5)
   ];
 }
 
@@ -548,6 +571,9 @@ function decodeShareV2(c) {
       const skillsArr = tuple[PT.SKILLS] || [];
       const skills = {};
       SKILLS.forEach((k, i) => skills[k] = (typeof skillsArr[i] === 'number') ? skillsArr[i] : 5);
+      const itArr = Array.isArray(tuple[PT.INTANG]) ? tuple[PT.INTANG] : [];
+      const intangibles = {};
+      INTANGIBLES.forEach((k, i) => intangibles[k] = (typeof itArr[i] === 'number') ? itArr[i] : 5);
       const pos = tuple[PT.POS];
       return {
         id: typeof tuple[PT.ID] === 'string' && tuple[PT.ID] ? tuple[PT.ID] : genId(),
@@ -559,6 +585,7 @@ function decodeShareV2(c) {
           ? [pos[0] || 'OH', pos[1] || null]
           : ['OH', null],
         skills,
+        intangibles,
         setterTempo: typeof tuple[PT.TEMPO] === 'number' ? tuple[PT.TEMPO] : 5,
         available: tuple[PT.AVAIL] !== 0
       };
@@ -590,6 +617,7 @@ function decodeShareLegacy(c) {
           ? [p.pos[0] || 'OH', p.pos[1] || null]
           : ['OH', null],
         skills,
+        intangibles: defaultIntangibles(),
         setterTempo: typeof p.st === 'number' ? p.st : 5,
         available: p.a !== 0
       };
@@ -637,44 +665,78 @@ function buildShareUrl() {
    {callout}=highlighted note. */
 const HELP = {
   'skills-key': {
-    title: 'Skills explained',
+    title: 'The six skills',
     body: [
-      { p: 'Each player has 6 skills, rated 1–10. Use these definitions to keep ratings consistent across your roster:' },
+      { p: 'Rate each player 1–10. Keep the definitions the same for everyone so the ratings mean something:' },
       { dl: [
-        ['Serving', 'Power, accuracy, and consistency of their serve.'],
-        ['Serve Receive', 'Passing a live serve cleanly to the setter.'],
-        ['Defense', 'Digging hard-driven balls, reading the opponent’s attack.'],
-        ['Hitting', 'Attacking strength at the net — kill efficiency and shot selection.'],
-        ['Blocking', 'Reading the setter, timing, and getting hands over the net.'],
-        ['Setting', 'Running offense as the setter — placing the second touch for a hitter.']
+        ['Serving', 'Gets it over and in, with some pace and placement.'],
+        ['Serve Receive', 'Passes the other team\'s serve up to the setter.'],
+        ['Defense', 'Digs hard-hit balls and reads where the attack is going.'],
+        ['Hitting', 'Puts the ball down from the net — power, placement, and smart shots.'],
+        ['Blocking', 'Gets hands over the net at the right time. Counts less at middle school, but your tall girls still get credit.'],
+        ['Setting', 'Runs the offense — a clean, hittable second ball.']
       ] },
-      { callout: 'Setters can also be rated on tempo (toggle in the topbar). Tempo is the breadth of their playbook — 1 means they only run high-outside sets, 10 means they confidently run quick attacks, slides, and back sets at game speed. It does NOT measure how good their setting is overall — that\'s the Setting skill above.' },
-      { callout: 'Tip: rate honestly relative to your team. A 7 means "above average for our group," not "above average in the league."' }
+      { callout: 'Rate against our team, not the league. A 7 means "one of our better ones," not "one of the best around."' }
+    ]
+  },
+  'intangibles': {
+    title: 'Intangibles',
+    body: [
+      { p: 'Two extra ratings that don\'t change who starts:' },
+      { dl: [
+        ['Attitude', 'Coachable, positive, good teammate.'],
+        ['Speed / Athleticism', 'Covers ground, quick to the ball, moves well.']
+      ] },
+      { callout: 'They decide who comes off the bench first in the sub plan, and break ties between two players who are otherwise equal. A better passer still starts over a nicer kid.' }
+    ]
+  },
+  'systems': {
+    title: 'Which system?',
+    body: () => {
+      const items = [
+        { dl: [
+          ['4-2', 'Two setters across from each other. Whichever one is in the front row sets; the other plays the back row. The classic middle-school system.'],
+          ['Simple 6', 'No positions, no system — your best six on the floor, rotating normally. Good for a scrimmage or a young team.'],
+          ['5-1', 'One setter who sets from everywhere. Only worth it when you have one girl who can run the whole rotation.']
+        ] }
+      ];
+      if (isHS()) items.push({ callout: '6-2 (high school): two setters, but the one in the BACK row sets, so you always have three hitters up front. Needs two setters who can also hit.' });
+      items.push({ callout: 'Drag a player onto a court zone to pin her there. Generate again and the pin holds.' });
+      return items;
+    }
+  },
+  'sub-plan': {
+    title: 'The sub plan',
+    body: [
+      { p: 'Once you generate a lineup, the plan lists how every girl on the bench gets in:' },
+      { dl: [
+        ['When she goes in', 'When the starter she replaces rotates back to serve. She serves, then plays two more rotations in the back row.'],
+        ['When she comes out', 'Right before she\'d rotate up to the net — the starter comes back in for her.'],
+        ['Order', 'Highest Attitude first, then Speed, then skill.']
+      ] },
+      { callout: 'Each swap uses two of your subs (in and back out). The plan stops when the next swap would go over your sub limit — change the limit under Advanced.' }
     ]
   },
   'optimization-mode': {
-    title: 'Optimization modes',
+    title: 'What "best" means',
     body: [
-      { p: 'The lineup builder picks the best legal arrangement for the chosen system. The mode controls what "best" means:' },
       { dl: [
-        ['Balanced', 'Maximin — protects against weak rotations. Use this for full sets where every rotation matters.'],
-        ['Best 6 on floor', 'Optimizes only the starting rotation. Use when you want the strongest opening 6 and care less about rotations 2-6.'],
-        ['Best serve-receive', 'Upweights serve-receive contributions. Use against a tough server.'],
-        ['Best serving', 'Upweights serving + blocking. Use when you need to break serve.']
-      ] },
-      { callout: 'Pin a player to a specific zone by dragging them onto it. The next regenerate respects the pin.' }
+        ['Balanced', 'No weak rotation. The usual choice.'],
+        ['Best 6 on floor', 'Strongest opening rotation; the rest can be uneven.'],
+        ['Best serve-receive', 'Favors passers. Use against a tough server.'],
+        ['Best serving', 'Favors servers. Use when you need to score from the line.']
+      ] }
     ]
   },
   'rotation-strength': {
-    title: 'Rotation strength bars',
+    title: 'Rotation strength',
     body: [
-      { p: 'In the lineup breakdown, the bars show per-rotation total skill on the floor — the maximin optimizer prefers lineups where the worst bar is as tall as possible.' },
+      { p: 'Each bar is the total skill on the floor for that rotation. Balanced mode makes the shortest bar as tall as it can.' },
       { dl: [
-        ['Worst', 'The lowest-strength rotation — your team is most vulnerable here.'],
-        ['Best', 'The strongest rotation.'],
-        ['Average', 'Mean strength across all 6 rotations.']
-      ] },
-      { callout: 'Switch optimization modes to see how the algorithm trades off worst-case vs. best-case strength.' }
+        ['Worst', 'Your most vulnerable rotation.'],
+        ['Best', 'Your strongest.'],
+        ['Average', 'All six together.']
+      ] }
     ]
   }
 };
@@ -685,7 +747,8 @@ function openHelp(key) {
   $('#helpTitle').textContent = entry.title;
   const bodyEl = $('#helpBody');
   bodyEl.replaceChildren();
-  for (const item of entry.body) {
+  const body = typeof entry.body === 'function' ? entry.body() : entry.body;
+  for (const item of body) {
     if (item.p) bodyEl.appendChild(el('p', { text: item.p }));
     else if (item.h) bodyEl.appendChild(el('h4', { text: item.h, attrs: { style: 'font-size:14px;margin:14px 0 6px;color:var(--green-dark);' } }));
     else if (item.dl) {
@@ -850,11 +913,13 @@ function playerFitForRole(player, role, settings) {
   if (!player || !role) return 0;
   const weights = ROLE_SKILL_WEIGHTS[role];
   if (!weights) return 0;
-  const cacheKey = _fitCache && `${player.id}|${role}|${settings && settings.showSetterTempo ? 1 : 0}`;
+  const cacheKey = _fitCache && `${player.id}|${role}|${(settings && settings.level) || 'ms'}|${settings && settings.showSetterTempo ? 1 : 0}`;
   if (_fitCache && _fitCache.has(cacheKey)) return _fitCache.get(cacheKey);
   let total = 0, weightSum = 0;
   for (const skill of SKILLS) {
-    const w = weights[skill] || 0;
+    let w = weights[skill] || 0;
+    // Blocking rarely decides a middle-school point; scale it by level.
+    if (skill === 'blocking') w *= currentLevel(settings).blockingScale;
     if (w === 0) continue;
     total += (player.skills[skill] || 0) * w;
     weightSum += w;
@@ -909,7 +974,7 @@ function chooseStarters(roster, system, mode, settings, forced, ruleset, pairing
     for (const role of Object.keys(reqs)) {
       const need = reqs[role];
       if (need > 0 && (counts[role] || 0) < need) {
-        const label = ROLE_LABELS[role].toLowerCase();
+        const label = roleLabel(role).toLowerCase();
         return { starters: null, validation: `Need ${need} ${label}${need > 1 ? 's' : ''} for ${system} system, found ${counts[role] || 0}.` };
       }
     }
@@ -967,7 +1032,7 @@ function chooseStarters(roster, system, mode, settings, forced, ruleset, pairing
       .filter(p => !forcedIds.has(p.id) && validRolesForPlayer(p, ruleset).includes(role))
       .map(p => ({
         p,
-        fit: playerFitForRole(p, role, settings),
+        fit: playerFitForRole(p, role, settings) + tiebreak(p),
         primary: (p.positions && p.positions[0]) === role
       }))
       .sort((a, b) => (b.primary - a.primary) || (b.fit - a.fit));
@@ -1727,25 +1792,27 @@ if (typeof window !== 'undefined') {
    6-2 systems. Wired to the "Load Demo Roster" button in the empty roster
    state — gives a coach trying the tool an instant, fully-functional team. */
 const DEMO_ROSTER = [
-  { name: 'Player 1',  positions: ['OH', 'DS'],  skills: { serving: 6, serveReceive: 7, defense: 6, hitting: 7, blocking: 4, setting: 3 } },
-  { name: 'Player 2',  positions: ['OH', null],  skills: { serving: 7, serveReceive: 7, defense: 6, hitting: 8, blocking: 5, setting: 3 } },
-  { name: 'Player 3',  positions: ['MB', null],  skills: { serving: 5, serveReceive: 3, defense: 5, hitting: 7, blocking: 9, setting: 2 } },
-  { name: 'Player 4',  positions: ['MB', 'OPP'], skills: { serving: 6, serveReceive: 3, defense: 5, hitting: 8, blocking: 8, setting: 2 } },
-  { name: 'Player 5',  positions: ['S',  null],  skills: { serving: 7, serveReceive: 5, defense: 7, hitting: 4, blocking: 4, setting: 9 }, setterTempo: 8 },
-  { name: 'Player 6',  positions: ['OPP', 'OH'], skills: { serving: 8, serveReceive: 5, defense: 6, hitting: 9, blocking: 7, setting: 3 } },
-  { name: 'Player 7',  positions: ['L',  null],  skills: { serving: 4, serveReceive: 9, defense: 9, hitting: 1, blocking: 1, setting: 3 } },
-  { name: 'Player 8',  positions: ['DS', 'OH'],  skills: { serving: 6, serveReceive: 8, defense: 8, hitting: 5, blocking: 2, setting: 3 } },
-  { name: 'Player 9',  positions: ['OH', 'DS'],  skills: { serving: 5, serveReceive: 6, defense: 6, hitting: 6, blocking: 4, setting: 3 } },
-  { name: 'Player 10', positions: ['MB', null],  skills: { serving: 5, serveReceive: 3, defense: 4, hitting: 6, blocking: 7, setting: 2 } },
-  { name: 'Player 11', positions: ['S',  'DS'],  skills: { serving: 6, serveReceive: 6, defense: 7, hitting: 3, blocking: 3, setting: 7 }, setterTempo: 6 },
-  { name: 'Player 12', positions: ['OPP', 'MB'], skills: { serving: 7, serveReceive: 4, defense: 5, hitting: 7, blocking: 6, setting: 2 } },
-  { name: 'Player 13', positions: ['DS', 'L'],   skills: { serving: 5, serveReceive: 8, defense: 7, hitting: 3, blocking: 1, setting: 3 } }
+  // 12 middle-school-shaped players: 2 setters, 4 hitters, 3 middles, 1 libero, 2 hitter/libero.
+  // Skills 3-8; intangibles varied so the sub plan has an order to it.
+  { name: 'Player 1',  positions: ['S',  null], skills: { serving: 7, serveReceive: 5, defense: 6, hitting: 4, blocking: 3, setting: 8 }, intangibles: { attitude: 8, athleticism: 6 } },
+  { name: 'Player 2',  positions: ['S',  'OH'], skills: { serving: 6, serveReceive: 5, defense: 5, hitting: 5, blocking: 3, setting: 7 }, intangibles: { attitude: 7, athleticism: 5 } },
+  { name: 'Player 3',  positions: ['OH', null], skills: { serving: 7, serveReceive: 7, defense: 6, hitting: 7, blocking: 4, setting: 3 }, intangibles: { attitude: 6, athleticism: 8 } },
+  { name: 'Player 4',  positions: ['OH', null], skills: { serving: 6, serveReceive: 7, defense: 6, hitting: 6, blocking: 4, setting: 3 }, intangibles: { attitude: 9, athleticism: 6 } },
+  { name: 'Player 5',  positions: ['OH', 'L'],  skills: { serving: 6, serveReceive: 6, defense: 6, hitting: 5, blocking: 3, setting: 3 }, intangibles: { attitude: 9, athleticism: 7 } },
+  { name: 'Player 6',  positions: ['OH', 'L'],  skills: { serving: 5, serveReceive: 6, defense: 5, hitting: 4, blocking: 3, setting: 3 }, intangibles: { attitude: 5, athleticism: 5 } },
+  { name: 'Player 7',  positions: ['MB', null], skills: { serving: 5, serveReceive: 3, defense: 4, hitting: 7, blocking: 7, setting: 2 }, intangibles: { attitude: 6, athleticism: 6 } },
+  { name: 'Player 8',  positions: ['MB', null], skills: { serving: 5, serveReceive: 4, defense: 4, hitting: 6, blocking: 8, setting: 2 }, intangibles: { attitude: 7, athleticism: 4 } },
+  { name: 'Player 9',  positions: ['MB', 'OH'], skills: { serving: 4, serveReceive: 4, defense: 4, hitting: 5, blocking: 6, setting: 2 }, intangibles: { attitude: 8, athleticism: 5 } },
+  { name: 'Player 10', positions: ['L',  null], skills: { serving: 5, serveReceive: 8, defense: 8, hitting: 2, blocking: 1, setting: 3 }, intangibles: { attitude: 8, athleticism: 8 } },
+  { name: 'Player 11', positions: ['OH', null], skills: { serving: 4, serveReceive: 5, defense: 5, hitting: 4, blocking: 3, setting: 3 }, intangibles: { attitude: 10, athleticism: 4 } },
+  { name: 'Player 12', positions: ['OH', null], skills: { serving: 3, serveReceive: 4, defense: 4, hitting: 3, blocking: 2, setting: 2 }, intangibles: { attitude: 6, athleticism: 3 } }
 ];
 
 function loadDemoRoster() {
   S.players = DEMO_ROSTER.map(d => ({
     ...createPlayer(d.name, d.positions),
     skills: { ...d.skills },
+    intangibles: { ...defaultIntangibles(), ...(d.intangibles || {}) },
     setterTempo: typeof d.setterTempo === 'number' ? d.setterTempo : 5
   }));
   save();
@@ -2183,6 +2250,10 @@ function buildPlayerCard(p) {
     overallNum.textContent = avgSkillDisplay(p);
     save();
   }));
+  skillBox.appendChild(el('h4', { cls: 'card-subhead label-with-help' }, [
+    'Intangibles ', makeHelpButton('intangibles', 'What are intangibles?')
+  ]));
+  skillBox.appendChild(buildIntangibleGrid(p));
   // Setter tempo: only when settings.showSetterTempo and primary === 'S'
   const tempoRow = buildSetterTempoRow(p);
   if (tempoRow) skillBox.appendChild(tempoRow);
@@ -2224,15 +2295,16 @@ function buildRosterFields(p) {
   heightInput.addEventListener('input', e => { p.height = e.target.value; save(); });
   heightInput.addEventListener('click', e => e.stopPropagation());
   heightRow.appendChild(heightInput);
+  heightRow.hidden = !isHS();
   wrap.appendChild(heightRow);
 
   // Primary position
   const priRow = el('div', { cls: 'roster-field' });
   priRow.appendChild(el('label', { text: 'Primary' }));
   const priSel = el('select');
-  ROLES.forEach(r => {
+  positionChoices(p).forEach(r => {
     const o = document.createElement('option');
-    o.value = r; o.textContent = `${r} — ${ROLE_LABELS[r]}`;
+    o.value = r; o.textContent = positionOptionText(r);
     priSel.appendChild(o);
   });
   priSel.value = p.positions?.[0] || 'OH';
@@ -2255,9 +2327,9 @@ function buildRosterFields(p) {
   const noneOpt = document.createElement('option');
   noneOpt.value = ''; noneOpt.textContent = '— none —';
   secSel.appendChild(noneOpt);
-  ROLES.forEach(r => {
+  positionChoices(p).forEach(r => {
     const o = document.createElement('option');
-    o.value = r; o.textContent = `${r} — ${ROLE_LABELS[r]}`;
+    o.value = r; o.textContent = positionOptionText(r);
     secSel.appendChild(o);
   });
   secSel.value = p.positions?.[1] || '';
@@ -2282,9 +2354,22 @@ function buildRosterFields(p) {
   handSel.addEventListener('change', e => { p.hand = e.target.value === 'L' ? 'L' : 'R'; save(); });
   handSel.addEventListener('click', e => e.stopPropagation());
   handRow.appendChild(handSel);
+  handRow.hidden = !isHS();
   wrap.appendChild(handRow);
 
   return wrap;
+}
+
+/* Which positions the picker offers: the level's list, plus any position
+   this player already has (so switching HS -> MS never silently drops one). */
+function positionChoices(p) {
+  const visible = currentLevel().roles.slice();
+  [p.positions?.[0], p.positions?.[1]].forEach(r => { if (r && !visible.includes(r)) visible.push(r); });
+  return visible;
+}
+function positionOptionText(r) {
+  // The role code (OH, MB) is jargon at MS; HS coaches use it.
+  return isHS() ? `${r} — ${roleLabel(r)}` : roleLabel(r);
 }
 
 function refreshSetterTempoRow(p) {
@@ -2345,8 +2430,15 @@ function buildSkillGrid(skillsObj, onChange) {
   return grid;
 }
 
-function buildSkillCell(skillsObj, skill, onChange) {
-  const label = el('span', { cls: 'skill-cell-label', text: SKILL_LABELS_SHORT[skill] });
+function buildIntangibleGrid(p) {
+  if (!p.intangibles) p.intangibles = defaultIntangibles();
+  const grid = el('div', { cls: 'skill-grid intangible-grid' });
+  INTANGIBLES.forEach(k => grid.appendChild(buildSkillCell(p.intangibles, k, () => save(), INTANGIBLE_LABELS_SHORT)));
+  return grid;
+}
+
+function buildSkillCell(skillsObj, skill, onChange, labels = SKILL_LABELS_SHORT) {
+  const label = el('span', { cls: 'skill-cell-label', text: labels[skill] });
   const input = el('input', {
     cls: 'skill-cell-input',
     attrs: {
@@ -2892,7 +2984,7 @@ function renderLineupBreakdown() {
   ROLES.forEach(role => {
     const players = (r.starters[role] || []).filter(Boolean);
     if (players.length === 0) return;
-    const dt = el('dt', { text: `${role} — ${ROLE_LABELS[role]}` });
+    const dt = el('dt', { text: `${role} — ${roleLabel(role)}` });
     const dd = el('dd', { text: players.map(p => p.name || '(unnamed)').join(', ') });
     dl.appendChild(dt);
     dl.appendChild(dd);
@@ -3225,6 +3317,26 @@ function applyLevelGates() {
   });
   $$('#systemSelect, #systemSelectLineup').forEach(sel => { sel.value = S.settings.system; });
   document.body.dataset.level = S.settings.level;
+  _levelOverridePainters.forEach(f => f());
+}
+
+/* Advanced-panel inputs that edit settings.levelOverrides. Each one repaints
+   from currentLevel() so a level change shows the new defaults. */
+const _levelOverridePainters = [];
+function bindLevelOverride(id, key, parse) {
+  const n = $(id); if (!n) return;
+  const paint = () => {
+    const v = currentLevel()[key];
+    if (n.type === 'checkbox') n.checked = !!v; else n.value = v;
+  };
+  paint();
+  _levelOverridePainters.push(paint);
+  n.addEventListener('change', e => {
+    S.settings.levelOverrides = { ...S.settings.levelOverrides, [key]: parse(e.target) };
+    save();
+    paint();
+    scheduleRegen();
+  });
 }
 
 /* ===== Theme =====
@@ -3409,6 +3521,10 @@ function init() {
       scheduleRegen();
     });
   }
+
+  bindLevelOverride('#advSubsPerSet', 'subsPerSet', t => Math.max(6, Math.min(30, parseInt(t.value, 10) || 18)));
+  bindLevelOverride('#advLeadThreshold', 'leadThreshold', t => Math.max(0, Math.min(15, parseInt(t.value, 10) || 0)));
+  bindLevelOverride('#advLiberoServe', 'liberoMayServe', t => !!t.checked);
 
   $('#resetWeightsBtn').addEventListener('click', async () => {
     const ok = await confirmDialog('Reset weights?', 'Restore all skill weights to defaults?');
