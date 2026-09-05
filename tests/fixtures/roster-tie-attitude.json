@@ -1,0 +1,202 @@
+[
+  {
+    "id": "p01",
+    "name": "Setter A",
+    "jersey": "1",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "S",
+      null
+    ],
+    "skills": {
+      "serving": 7,
+      "serveReceive": 5,
+      "defense": 6,
+      "hitting": 4,
+      "blocking": 3,
+      "setting": 8
+    },
+    "intangibles": {
+      "attitude": 7,
+      "athleticism": 6
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p02",
+    "name": "Setter B",
+    "jersey": "2",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "S",
+      null
+    ],
+    "skills": {
+      "serving": 6,
+      "serveReceive": 5,
+      "defense": 5,
+      "hitting": 5,
+      "blocking": 3,
+      "setting": 7
+    },
+    "intangibles": {
+      "attitude": 7,
+      "athleticism": 5
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p03",
+    "name": "Hitter Top",
+    "jersey": "3",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "OH",
+      null
+    ],
+    "skills": {
+      "serving": 8,
+      "serveReceive": 8,
+      "defense": 7,
+      "hitting": 8,
+      "blocking": 5,
+      "setting": 3
+    },
+    "intangibles": {
+      "attitude": 6,
+      "athleticism": 6
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p04",
+    "name": "Hitter Nice",
+    "jersey": "4",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "OH",
+      null
+    ],
+    "skills": {
+      "serving": 6,
+      "serveReceive": 6,
+      "defense": 6,
+      "hitting": 6,
+      "blocking": 4,
+      "setting": 3
+    },
+    "intangibles": {
+      "attitude": 9,
+      "athleticism": 5
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p05",
+    "name": "Hitter Grump",
+    "jersey": "5",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "OH",
+      null
+    ],
+    "skills": {
+      "serving": 6,
+      "serveReceive": 6,
+      "defense": 6,
+      "hitting": 6,
+      "blocking": 4,
+      "setting": 3
+    },
+    "intangibles": {
+      "attitude": 3,
+      "athleticism": 5
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p06",
+    "name": "Middle A",
+    "jersey": "6",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "MB",
+      null
+    ],
+    "skills": {
+      "serving": 5,
+      "serveReceive": 3,
+      "defense": 4,
+      "hitting": 7,
+      "blocking": 7,
+      "setting": 2
+    },
+    "intangibles": {
+      "attitude": 6,
+      "athleticism": 6
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p07",
+    "name": "Middle B",
+    "jersey": "7",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "MB",
+      null
+    ],
+    "skills": {
+      "serving": 5,
+      "serveReceive": 4,
+      "defense": 4,
+      "hitting": 6,
+      "blocking": 8,
+      "setting": 2
+    },
+    "intangibles": {
+      "attitude": 7,
+      "athleticism": 4
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p08",
+    "name": "Libero",
+    "jersey": "8",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "L",
+      null
+    ],
+    "skills": {
+      "serving": 5,
+      "serveReceive": 8,
+      "defense": 8,
+      "hitting": 2,
+      "blocking": 1,
+      "setting": 3
+    },
+    "intangibles": {
+      "attitude": 8,
+      "athleticism": 8
+    },
+    "setterTempo": 5,
+    "available": true
+  }
+]

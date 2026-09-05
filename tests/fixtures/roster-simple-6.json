@@ -1,0 +1,152 @@
+[
+  {
+    "id": "p01",
+    "name": "Ava",
+    "jersey": "1",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "S",
+      null
+    ],
+    "skills": {
+      "serving": 6,
+      "serveReceive": 5,
+      "defense": 5,
+      "hitting": 4,
+      "blocking": 3,
+      "setting": 7
+    },
+    "intangibles": {
+      "attitude": 7,
+      "athleticism": 6
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p02",
+    "name": "Bea",
+    "jersey": "2",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "OH",
+      null
+    ],
+    "skills": {
+      "serving": 6,
+      "serveReceive": 6,
+      "defense": 5,
+      "hitting": 6,
+      "blocking": 3,
+      "setting": 3
+    },
+    "intangibles": {
+      "attitude": 6,
+      "athleticism": 6
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p03",
+    "name": "Cara",
+    "jersey": "3",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "OH",
+      null
+    ],
+    "skills": {
+      "serving": 5,
+      "serveReceive": 6,
+      "defense": 5,
+      "hitting": 5,
+      "blocking": 3,
+      "setting": 3
+    },
+    "intangibles": {
+      "attitude": 8,
+      "athleticism": 5
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p04",
+    "name": "Dana",
+    "jersey": "4",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "MB",
+      null
+    ],
+    "skills": {
+      "serving": 5,
+      "serveReceive": 4,
+      "defense": 4,
+      "hitting": 6,
+      "blocking": 6,
+      "setting": 2
+    },
+    "intangibles": {
+      "attitude": 6,
+      "athleticism": 7
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p05",
+    "name": "Elle",
+    "jersey": "5",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "MB",
+      null
+    ],
+    "skills": {
+      "serving": 4,
+      "serveReceive": 4,
+      "defense": 4,
+      "hitting": 5,
+      "blocking": 6,
+      "setting": 2
+    },
+    "intangibles": {
+      "attitude": 7,
+      "athleticism": 4
+    },
+    "setterTempo": 5,
+    "available": true
+  },
+  {
+    "id": "p06",
+    "name": "Fay",
+    "jersey": "6",
+    "height": "",
+    "hand": "R",
+    "positions": [
+      "OH",
+      null
+    ],
+    "skills": {
+      "serving": 5,
+      "serveReceive": 5,
+      "defense": 5,
+      "hitting": 4,
+      "blocking": 3,
+      "setting": 3
+    },
+    "intangibles": {
+      "attitude": 5,
+      "athleticism": 5
+    },
+    "setterTempo": 5,
+    "available": true
+  }
+]

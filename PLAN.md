@@ -1,6 +1,6 @@
 # Court IQ — Covenant · v1 Implementation Plan
 
-**Plan dated**: 2026-09-05 · **Status**: Block 0 built locally (repo not yet on GitHub — 0.1's `gh repo create` awaits approval) · **Source repo**: `court-iq-college` (fork point `b66e0d5`)
+**Plan dated**: 2026-09-05 · **Status**: Blocks 0–6 built locally, 26 tests green. Not yet on GitHub (0.1's `gh repo create` awaits approval); 3.4 real logo/colors pending; 6.4 device check pending · **Source repo**: `court-iq-college` (fork point `b66e0d5`)
 **Target repo**: `court-iq-covenant` (new) · **Live (once created)**: https://demerson-code.github.io/court-iq-covenant/ · **Preview**: port 3470
 
 Untracked by intent — this file owns per-block scope. `CLAUDE.md` in the new repo will point here.
@@ -756,9 +756,9 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
 
 ### Tasks
 
-- [ ] **6.1 — Fixtures.** `roster-ms-12.json` (2 S, 4 OH, 3 MB, 1 L, 2 OH — includes `intangibles`), `roster-simple-6.json` (6 players, mixed positions), `roster-tie-attitude.json` (7 players; two OH with identical skills, attitude 9 vs 3). `runGenerate` helper in the spec gains `level` (default `'ms'`) and sets `window.S.settings.level`, drops `ruleset`.
+- [x] **6.1 — Fixtures.** `roster-ms-12.json` (2 S, 4 OH, 3 MB, 1 L, 2 OH — includes `intangibles`), `roster-simple-6.json` (6 players, mixed positions), `roster-tie-attitude.json` (7 players; two OH with identical skills, attitude 9 vs 3). `runGenerate` helper in the spec gains `level` (default `'ms'`) and sets `window.S.settings.level`, drops `ruleset`.
 
-- [ ] **6.2 — Assertions** (each its own `test`):
+- [x] **6.2 — Assertions** (each its own `test`):
   1. 4-2 on ms-12: starters have 2 S, 2 OH, 2 MB; `result.libero.player` set; every rotation has exactly one S in `frontRow` and one in `backRow`.
   2. `roleForScoring(setter, 'back', '4-2') === 'DS'` and `(…, 'front', '4-2') === 'S'`; `(…, 'front', '6-2') === 'OPP'`; `(…, 'back', '5-1') === 'S'`.
   3. Simple 6 on simple-6 fixture: no error, 6 starters, `libero === null`.
@@ -772,7 +772,7 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
   11. `canSub` refuses over cap, refuses wrong-slot re-entry, allows same-slot re-entry.
   12. Existing 5-1 / 6-2 assertions unchanged (10 tests).
 
-- [ ] **6.3 — Print.** `buildPrintLineupDOM` (`app.js:1761`): after the rotation table add "Sub plan" table (In · For · Goes in at · Comes out at) from auto patterns, then "Subs: N of cap". `buildPrintRosterDOM` (`app.js:1714`): add Attitude and Athl. columns after the six skills; header shows Level. Print CSS: `.print-subplan td { padding: 3pt 6pt; }`, keep to one page for ≤ 14 players (test at 14).
+- [x] **6.3 — Print.** `buildPrintLineupDOM` (`app.js:1761`): after the rotation table add "Sub plan" table (In · For · Goes in at · Comes out at) from auto patterns, then "Subs: N of cap". `buildPrintRosterDOM` (`app.js:1714`): add Attitude and Athl. columns after the six skills; header shows Level. Print CSS: `.print-subplan td { padding: 3pt 6pt; }`, keep to one page for ≤ 14 players (test at 14).
 
 - [ ] **6.4 — Final verification.**
   ```bash

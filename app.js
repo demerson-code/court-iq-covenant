@@ -2106,34 +2106,40 @@ function buildPrintRosterDOM() {
   const header = el('header', { cls: 'print-header' }, [
     el('h1', { text: 'Court IQ — ' + teamName }),
     el('div', { cls: 'print-meta', text:
-      'Roster · ' + date + ' · ' + avail + ' of ' + S.players.length + ' available' })
+      'Roster · ' + currentLevel().label + ' · ' + date + ' · ' + avail + ' of ' + S.players.length + ' available' })
   ]);
   page.appendChild(header);
 
+  const hs = isHS();
   const table = el('table', { cls: 'print-roster' });
   const thead = el('thead', {}, [
     el('tr', {}, [
       el('th', { text: '#' }),
       el('th', { text: 'Name' }),
       el('th', { text: 'Position' }),
-      el('th', { text: 'Hand' }),
-      el('th', { text: 'Height' }),
-      el('th', { text: 'AVG' }),
+      hs ? el('th', { text: 'Hand' }) : null,
+      hs ? el('th', { text: 'Height' }) : null,
+      ...SKILLS.map(k => el('th', { cls: 'num', text: SKILL_LABELS_SHORT[k] })),
+      el('th', { cls: 'num', text: 'AVG' }),
+      ...INTANGIBLES.map(k => el('th', { cls: 'num', text: INTANGIBLE_LABELS_SHORT[k] })),
       el('th', { text: '' })
     ])
   ]);
   const tbody = el('tbody');
   sorted.forEach(p => {
-    const pos = [p.positions[0], p.positions[1]].filter(Boolean).join(' / ');
+    const pos = [p.positions[0], p.positions[1]].filter(Boolean).map(roleLabel).join(' / ');
     const avg = playerSkillRaw(p).toFixed(1);
     const status = p.available ? '' : 'OUT';
+    const it = p.intangibles || defaultIntangibles();
     tbody.appendChild(el('tr', {}, [
       el('td', { cls: 'num', text: p.jersey || '' }),
       el('td', { text: p.name || '—' }),
       el('td', { text: pos }),
-      el('td', { cls: 'center', text: p.hand || '' }),
-      el('td', { text: p.height || '' }),
+      hs ? el('td', { cls: 'center', text: p.hand || '' }) : null,
+      hs ? el('td', { text: p.height || '' }) : null,
+      ...SKILLS.map(k => el('td', { cls: 'num', text: String(p.skills[k] || 5) })),
       el('td', { cls: 'num', text: avg }),
+      ...INTANGIBLES.map(k => el('td', { cls: 'num', text: String(it[k] || 5) })),
       el('td', { cls: 'status', text: status })
     ]));
   });
@@ -2160,17 +2166,23 @@ function buildPrintLineupDOM() {
       'Lineup · ' + date + ' · System ' + sys + ' · ' + modeLabel + liberoNote })
   ]));
 
+  const level = currentLevel();
+  const patterns = S.lineup.subPatterns || [];
+  const tagOf = (p) => (S.settings?.showJersey && p.jersey) ? '#' + p.jersey + ' ' : '';
   const cell = (p) => {
     if (!p) return el('td');
     const td = el('td');
     const role = (p.positions && p.positions[0]) || '';
-    td.appendChild(el('span', { cls: 'rl', text: role }));
-    td.appendChild(document.createTextNode(' ' + (p.name || '—')));
+    const isLib = lib && p.id === lib.id;
+    td.appendChild(el('span', { cls: 'rl' + (p._sub ? ' rl-sub' : ''), text: isLib ? 'L' : (p._sub ? 'SUB' : role) }));
+    td.appendChild(document.createTextNode(' ' + tagOf(p) + (p.name || '—')));
     return td;
   };
 
   const rots = el('div', { cls: 'print-rotations' });
-  (r.arrangement.rotations || []).forEach((rot, i) => {
+  (r.arrangement.rotations || []).forEach((raw, i) => {
+    // Same pipeline as the screen: planned subs, then the libero swap.
+    const rot = effectiveRotationWithLibero(applySubPatterns(raw, patterns, i), r.libero, level);
     const sc = (r.perRotationScores[i] || 0).toFixed(1);
     const fr = rot.frontRow || [];
     const br = rot.backRow || [];
@@ -2191,6 +2203,34 @@ function buildPrintLineupDOM() {
     rots.appendChild(rotEl);
   });
   page.appendChild(rots);
+
+  // Sub plan
+  const auto = patterns.filter(p => p.auto && p.in && p.out);
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  if (auto.length) {
+    const subsUsed = patterns.reduce((n, p) => n + (p.return ? 2 : 1), 0);
+    page.appendChild(el('h2', { cls: 'print-h2', text: 'Sub plan — ' + subsUsed + ' of ' + level.subsPerSet + ' subs' }));
+    const tbl = el('table', { cls: 'print-subplan' }, [
+      el('thead', {}, [el('tr', {}, [
+        el('th', { text: '' }), el('th', { text: 'In' }), el('th', { text: 'For' }),
+        el('th', { text: 'Goes in' }), el('th', { text: 'Comes out' })
+      ])]),
+      el('tbody', {}, auto.map((pat, i) => {
+        const starter = byId.get(pat.out);
+        return el('tr', {}, [
+          el('td', { cls: 'num', text: String(i + 1) }),
+          el('td', { text: tagOf(pat.in) + (pat.in.name || '—') }),
+          el('td', { text: starter ? tagOf(starter) + (starter.name || '—') : '—' }),
+          el('td', { text: 'Rotation ' + (pat.trigger.rotationIndex + 1) + (starter ? ' — when ' + starter.name.split(' ')[0] + ' rotates to serve' : '') }),
+          el('td', { text: pat.return ? 'Rotation ' + (pat.return.rotationIndex + 1) : '—' })
+        ]);
+      }))
+    ]);
+    page.appendChild(tbl);
+    if (S.plan && S.plan.benchLeft && S.plan.benchLeft.length) {
+      page.appendChild(el('p', { cls: 'print-note', text: 'Still on the bench: ' + S.plan.benchLeft.map(p => p.name).join(', ') + ' (no subs left).' }));
+    }
+  }
   return page;
 }
 

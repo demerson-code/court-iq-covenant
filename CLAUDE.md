@@ -46,7 +46,8 @@ starting spot. See `TIEBREAK_WEIGHT`.
   match/bench state, scrimmage attendance/teams, `currentTab`, sort prefs.
 - **Team-forever state goes in the share link**: roster (incl. intangibles),
   weights, settings (level + overrides), lineup config (overrides, libero,
-  sub patterns incl. the auto plan, pairings, everybodyPlays), team name.
+  coach-authored sub patterns, pairings, everybodyPlays, planExclude), team
+  name. The auto sub plan is NOT saved or shared — Generate re-derives it.
 
 ## Share link (v:2 envelope)
 
@@ -115,5 +116,13 @@ Beyond those:
 
 ## Block status
 
-- Block 0 (fork, Level dial, light theme): in progress.
-- Blocks 1–6: not started. See `PLAN.md`.
+- Blocks 0–6 built and verified locally (26 Playwright tests). See `PLAN.md`.
+- Pending: GitHub repo + Pages (needs Derek's go-ahead), real Covenant
+  logo/colors (placeholder navy + "C" mark in place), iPad device check.
+
+## Bench / match state
+
+`S.match` is tonight-only (local, never shared). At Start set it snapshots
+`starters`, `liberoId` and `plan` as ids, so the bench renders after a reload
+with `S.result === null`. Legality lives in `canSub()`; every sub goes through
+`applySub()`; both are pure and on `window`.
