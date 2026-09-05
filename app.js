@@ -400,7 +400,7 @@ function save(opts = {}) {
       optimizationMode: S.lineup.optimizationMode,
       overrides: S.lineup.overrides,
       liberoConfig: S.lineup.liberoConfig,
-      subPatterns: S.lineup.subPatterns.filter(p => !p.auto), // planned subs are re-derived on Generate
+      subPatterns: S.lineup.subPatterns.filter(p => !p.auto).map(p => ({ ...p, in: p.in ? { id: p.in.id } : null })), // planned subs are re-derived on Generate; `in` relinks by id on load
       pairings: S.lineup.pairings,
       everybodyPlays: S.lineup.everybodyPlays !== false,
       planExclude: S.lineup.planExclude || {},
@@ -543,7 +543,9 @@ function applyLoadedState(data) {
       liberoConfig: data.lineup.liberoConfig && typeof data.lineup.liberoConfig === 'object'
         ? { ...defaultLineup().liberoConfig, ...data.lineup.liberoConfig }
         : defaultLineup().liberoConfig,
-      subPatterns: Array.isArray(data.lineup.subPatterns) ? data.lineup.subPatterns.filter(p => p && !p.auto) : [],
+      subPatterns: Array.isArray(data.lineup.subPatterns)
+        ? data.lineup.subPatterns.filter(p => p && !p.auto).map(p => ({ ...p, in: (p.in && p.in.id) ? (S.players.find(x => x.id === p.in.id) || null) : null }))
+        : [],
       pairings: Array.isArray(data.lineup.pairings) ? data.lineup.pairings : [],
       everybodyPlays: data.lineup.everybodyPlays !== false,
       planExclude: (data.lineup.planExclude && typeof data.lineup.planExclude === 'object') ? data.lineup.planExclude : {},
@@ -626,7 +628,7 @@ function encodeStateForUrl() {
     p: S.players.map(compactPlayer),
     w: SKILLS.map(k => S.weights[k] | 0),
     cfg: S.settings,
-    ln: { ...S.lineup, subPatterns: S.lineup.subPatterns.filter(p => !p.auto) },
+    ln: { ...S.lineup, subPatterns: S.lineup.subPatterns.filter(p => !p.auto).map(p => ({ ...p, in: p.in ? { id: p.in.id } : null })) },
     e: S.lastEdited || undefined
   };
   return b64urlEncode(JSON.stringify(compact));
@@ -1538,7 +1540,11 @@ function planEverybodyPlays(state, result) {
   const patterns = [];
   const used = new Set();
   const planned = new Set();
-  let subsUsed = 0;
+  // The coach's own subs come first: they use subs, their starters are
+  // spoken for, and their subs are on the floor.
+  const coach = coachPatterns(state);
+  let subsUsed = coach.reduce((n, pt) => n + (pt.return ? 2 : 1), 0);
+  coach.forEach(pt => { used.add(pt.out); planned.add(pt.in.id); });
 
   // Setters play the front row only (4-2): a passer goes in for each setter
   // when she rotates to the back row, before anyone else is planned. NFHS
@@ -1632,11 +1638,104 @@ function resultFromBoard(state) {
   return { starters, roleOf, arrangement, libero: libResolved, score, perRotationScores, validation, board, holes };
 }
 
+/* Coach subs: sub patterns the coach made by dragging in rotations 2-6.
+   Shape is the ordinary subPattern shape plus coach:true. `return` of
+   rotation 0 means "through the end of the trip around". */
+function coachPatterns(state) {
+  state = state || S;
+  return ((state.lineup && state.lineup.subPatterns) || []).filter(p => p && p.coach && p.in && p.out);
+}
+
+/* courtEffective: the six on the floor in rotation idx as the COACH set it —
+   starting six, her own subs, the libero. The automatic everybody-plays
+   subs are deliberately left out: they're conditional ("if we're ahead")
+   and live in the Sub plan and the six-rotation grid. */
+function courtEffective(idx, state) {
+  state = state || S;
+  const r = state.result;
+  if (!r || !r.arrangement) return null;
+  const level = currentLevel(state.settings);
+  return effectiveRotationWithLibero(applySubPatterns(r.arrangement.rotations[idx], coachPatterns(state), idx), r.libero, level, idx);
+}
+
+/* coachSubDrop: a drag onto a spot in rotation idx >= 1. Returns true if
+   something changed. Rules follow NFHS re-entry: a starter who was subbed
+   out can only come back in for the player who replaced her. */
+function coachSubDrop(idx, zone, inId) {
+  if (!(zone >= 1 && zone <= 6) || !Number.isInteger(idx)) return false;
+  const eff = courtEffective(idx);
+  if (!eff) return false;
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  const inP = byId.get(inId);
+  if (!inP) return false;
+  const target = playerAtZone(eff, zone);
+  const libId = S.result.libero && S.result.libero.player ? S.result.libero.player.id : null;
+  if (!target) {
+    // An empty spot means a starter went unavailable — fill the starting six instead.
+    return boardPutPlayer(idx, zone, inId);
+  }
+  if (target.id === libId) { toast('The libero swaps on her own — change her under Libero.', 3000); return false; }
+  if (inId === libId) { toast('She\u2019s the libero — change that under Libero first.', 3000); return false; }
+  const coach = coachPatterns();
+  // Return leg: the starter comes back in for the girl who replaced her.
+  const back = coach.find(pt => pt.in.id === target.id && pt.out === inId && _patternActiveAt(pt, idx));
+  if (back) {
+    if (back.trigger.rotationIndex === idx) {
+      S.lineup.subPatterns = S.lineup.subPatterns.filter(x => x !== back);
+    } else {
+      back.return = { rotationIndex: idx, event: 'in' };
+    }
+    save();
+    runGenerate();
+    toast(`${inP.name} back in for ${target.name} at rotation ${idx + 1}.`, 2600);
+    return true;
+  }
+  if (coach.some(pt => pt.in.id === target.id && _patternActiveAt(pt, idx))) {
+    toast(`${target.name} is a sub — bring the starter back first.`, 3200);
+    return false;
+  }
+  const outPat = coach.find(pt => pt.out === inId && _patternActiveAt(pt, idx));
+  if (outPat) {
+    toast(`${inP.name} can only come back in for ${outPat.in.name} (same spot rule).`, 3200);
+    return false;
+  }
+  if (eff.frontRow.concat(eff.backRow).some(pl => pl && pl.id === inId)) {
+    toast('She\u2019s already on the floor.', 2400);
+    return false;
+  }
+  S.lineup.subPatterns.push({
+    id: 'coach_' + genId(),
+    out: target.id, in: inP,
+    trigger: { rotationIndex: idx, event: 'in' },
+    return: { rotationIndex: 0, event: 'in' },
+    coach: true
+  });
+  save();
+  runGenerate();
+  toast(`${inP.name} in for ${target.name} from rotation ${idx + 1}.`, 2600);
+  return true;
+}
+
+/* coachSubOut: a court chip dragged to the bench in rotation idx >= 1. If
+   she's a coach sub, the starter comes back here. */
+function coachSubOut(idx, playerId) {
+  const pat = coachPatterns().find(pt => pt.in.id === playerId && _patternActiveAt(pt, idx));
+  if (!pat) { toast('Drag a bench player onto her spot to sub her out.', 3000); return false; }
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  if (pat.trigger.rotationIndex === idx) S.lineup.subPatterns = S.lineup.subPatterns.filter(x => x !== pat);
+  else pat.return = { rotationIndex: idx, event: 'in' };
+  save();
+  runGenerate();
+  const starter = byId.get(pat.out);
+  toast(`${starter ? starter.name : 'Starter'} back in at rotation ${idx + 1}.`, 2600);
+  return true;
+}
+
 /* Board edits. Slot = position in startOrder; zone z in rotation r is slot (z-1+r) mod 6. */
 function boardSlot(rotIdx, zone) { return ((zone - 1 + rotIdx) % 6 + 6) % 6; }
 function boardPutPlayer(rotIdx, zone, playerId) {
   const board = S.lineup.board;
-  if (!board) return false;
+  if (!board || !(zone >= 1 && zone <= 6) || !Number.isInteger(rotIdx)) return false;
   const slot = boardSlot(rotIdx, zone);
   if (board.startOrder[slot] === playerId) return false;
   if (playerId === board.liberoId || playerId === (S.lineup.liberoConfig && S.lineup.liberoConfig.playerId)) {
@@ -1658,7 +1757,7 @@ function boardPutPlayer(rotIdx, zone, playerId) {
 }
 function boardSwap(rotA, zoneA, rotB, zoneB) {
   const board = S.lineup.board;
-  if (!board) return false;
+  if (!board || !(zoneA >= 1 && zoneA <= 6) || !(zoneB >= 1 && zoneB <= 6)) return false;
   const a = boardSlot(rotA, zoneA), b = boardSlot(rotB, zoneB);
   if (a === b) return false;
   const tmp = board.startOrder[a];
@@ -2166,6 +2265,11 @@ if (typeof window !== 'undefined') {
   window.applySubPatterns = applySubPatterns;
   window.planEverybodyPlays = planEverybodyPlays;
   window.resultFromBoard = resultFromBoard;
+  window.coachSubDrop = coachSubDrop;
+  window.coachSubOut = coachSubOut;
+  window.courtEffective = courtEffective;
+  window.playerAtZone = playerAtZone;
+  window.runGenerate = runGenerate;
   window.resolveLiberoServeRot = resolveLiberoServeRot;
   window.effectiveRotationWithLibero = effectiveRotationWithLibero;
   window.canSub = canSub;
@@ -2334,7 +2438,7 @@ function buildPrintLineupDOM() {
   page.appendChild(rots);
 
   // Sub plan
-  const auto = patterns.filter(p => p.auto && p.in && p.out);
+  const auto = patterns.filter(p => (p.auto || p.coach) && p.in && p.out);
   const byId = new Map(S.players.map(p => [p.id, p]));
   if (auto.length) {
     const subsUsed = patterns.reduce((n, p) => n + (p.return ? 2 : 1), 0);
@@ -2350,8 +2454,8 @@ function buildPrintLineupDOM() {
           el('td', { cls: 'num', text: String(i + 1) }),
           el('td', { text: tagOf(pat.in) + (pat.in.name || '—') }),
           el('td', { text: starter ? tagOf(starter) + (starter.name || '—') : '—' }),
-          el('td', { text: 'Rotation ' + (pat.trigger.rotationIndex + 1) + (starter ? ' — when ' + starter.name.split(' ')[0] + ' rotates to serve' : '') }),
-          el('td', { text: pat.return ? 'Rotation ' + (pat.return.rotationIndex + 1) : '—' })
+          el('td', { text: 'Rotation ' + (pat.trigger.rotationIndex + 1) + (pat.coach ? ' (your sub)' : (starter ? ' — when ' + starter.name.split(' ')[0] + ' rotates to serve' : '')) }),
+          el('td', { text: pat.return ? (pat.coach && pat.return.rotationIndex === 0 ? 'End of trip' : 'Rotation ' + (pat.return.rotationIndex + 1)) : '—' })
         ]);
       }))
     ]);
@@ -2566,20 +2670,26 @@ function performDrop(source, target) {
 
   if (!S.result || !S.lineup.board) return;
 
-  // bench → zone: she takes that spot; whoever was there goes to the bench.
+  // Rotation 1 is the starting six. Any later rotation: a drag is a substitution.
+  const startingSix = target.kind === 'zone' ? target.rotIdx === 0 : source.rotIdx === 0;
+
+  // bench → zone
   if (source.kind === 'bench' && target.kind === 'zone') {
-    if (boardPutPlayer(target.rotIdx, target.zone, source.playerId)) toast('Swapped in.');
+    if (startingSix) { if (boardPutPlayer(target.rotIdx, target.zone, source.playerId)) toast('Swapped in.'); }
+    else coachSubDrop(target.rotIdx, target.zone, source.playerId);
     return;
   }
-  // court → zone: the two players trade spots.
+  // court → zone
   if (source.kind === 'court' && target.kind === 'zone') {
     if (source.rotIdx === target.rotIdx && source.zone === target.zone) return;
-    if (boardSwap(source.rotIdx, source.zone, target.rotIdx, target.zone)) toast('Swapped.');
+    if (source.rotIdx === 0 && target.rotIdx === 0) { if (boardSwap(0, source.zone, 0, target.zone)) toast('Swapped.'); }
+    else toast('Positions come from the starting order — swap players in rotation 1. In later rotations, drag from the bench to sub.', 3600);
     return;
   }
-  // court → bench: you always need six on the floor.
+  // court → bench
   if (source.kind === 'court' && target.kind === 'bench') {
-    toast('Drag a bench player onto her spot instead — you need six on the floor.', 3200);
+    if (startingSix) toast('Drag a bench player onto her spot instead — you need six on the floor.', 3200);
+    else coachSubOut(source.rotIdx, source.playerId);
     return;
   }
 }
@@ -3018,18 +3128,17 @@ function renderCourtView() {
     }));
   }
 
-  const eff = effectiveRotationWithLibero(r.arrangement.rotations[idx], r.libero, level, idx);
+  const eff = courtEffective(idx);
+  const coachIn = new Set(coachPatterns().filter(pt => _patternActiveAt(pt, idx)).map(pt => pt.in.id));
   const grid = el('div', { cls: 'rot-court big-rot-court' });
   for (const z of [4, 3, 2, 5, 6, 1]) {
     const player = playerAtZone(eff, z);
-    const overridden = isZoneOverridden(idx, z);
     const isLibero = r.libero && r.libero.player && player && player.id === r.libero.player.id;
     const cellCls = ['rot-zone'];
     if (z === 1) cellCls.push('rot-zone-server');
-    if (overridden) cellCls.push('rot-zone-override');
     if (isLibero) cellCls.push('rot-zone-libero');
     const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${POSITION_NAMES[z]}` });
-    const chip = buildPlayerChip(player, idx, z, false, true);
+    const chip = buildPlayerChip(player, idx, z, !!(player && coachIn.has(player.id)), true);
     grid.appendChild(el('div', { cls: cellCls.join(' '), dataset: { rotIdx: String(idx), zone: String(z) } }, [zoneLabel, chip]));
   }
   court.appendChild(grid);
@@ -3063,7 +3172,20 @@ function renderCourtView() {
     el('div', { cls: 'lb-bd-stat' }, [el('span', { cls: 'lb-bd-stat-label', text: 'Average' }), el('span', { cls: 'lb-bd-stat-val', text: avg.toFixed(1) })]),
     el('div', { cls: 'lb-bd-stat' }, [el('span', { cls: 'lb-bd-stat-label', text: 'Best' }), el('span', { cls: 'lb-bd-stat-val', text: `${max.toFixed(1)} · R${scores.indexOf(max) + 1}` })])
   ]));
-  card.appendChild(el('p', { cls: 'hint score-hint', text: 'Numbers are the six on the floor, averaged (1–10). Drag a bench player onto a spot to try her there.' }));
+  card.appendChild(el('p', { cls: 'hint score-hint', text: 'Numbers are the six on the floor, averaged (1–10).' }));
+
+  const hint = $('#courtHint');
+  if (hint) {
+    hint.replaceChildren();
+    if (idx === 0) {
+      hint.appendChild(el('strong', { text: 'Rotation 1 is your starting six. ' }));
+      hint.appendChild(document.createTextNode('Drag a bench player onto a spot to put her in, or drag two players on the court to swap them. Tap Rotate to walk through the set.'));
+    } else {
+      hint.appendChild(el('strong', { text: `Rotation ${idx + 1} — drags here are substitutions. ` }));
+      hint.appendChild(document.createTextNode('Drag a bench player onto a spot and she comes in for that player from this rotation on. Drag the starter back onto her (or drag the sub to the bench) to bring the starter back. Each one counts against your subs.'));
+    }
+  }
+  renderBench();
 }
 
 function updateClearOverridesBtn() {
@@ -3428,14 +3550,32 @@ function renderSubPlanPanel() {
   const byId = new Map(S.players.map(p => [p.id, p]));
   const tag = p => (S.settings?.showJersey && p.jersey) ? `#${p.jersey} ${p.name}` : (p.name || '(unnamed)');
   const auto = all.filter(p => p.auto);
+  const coach = all.filter(p => p.coach && p.in && p.out);
   const left = $('#subPlanLeft');
+
+  coach.forEach(pat => {
+    const starter = byId.get(pat.out);
+    if (!starter) return;
+    const row = el('li', { cls: 'sub-plan-row is-coach' });
+    row.appendChild(el('div', { cls: 'sub-plan-who' }, [
+      el('strong', { text: tag(pat.in) }), ' in for ', el('strong', { text: tag(starter) })
+    ]));
+    const ret = pat.return ? pat.return.rotationIndex : null;
+    row.appendChild(el('div', { cls: 'sub-plan-when', text:
+      `Your sub · from rotation ${pat.trigger.rotationIndex + 1}` + (ret === 0 || ret == null ? ' through rotation 6' : ` · ${starter.name.split(' ')[0]} back at rotation ${ret + 1}`) }));
+    row.appendChild(el('button', {
+      cls: 'btn btn-secondary btn-tiny sub-plan-x', text: '✕', attrs: { 'aria-label': 'Remove this sub' }, title: 'Remove this sub',
+      on: { click: () => { S.lineup.subPatterns = S.lineup.subPatterns.filter(x => x !== pat); save(); runGenerate(); } }
+    }));
+    list.appendChild(row);
+  });
 
   if (S.lineup.everybodyPlays === false) {
     list.appendChild(el('li', { cls: 'sub-plan-empty', text: 'Turn this on and the plan fills in after Generate.' }));
     if (left) left.textContent = '';
     return;
   }
-  if (auto.length === 0) {
+  if (auto.length === 0 && coach.length === 0) {
     list.appendChild(el('li', { cls: 'sub-plan-empty', text: 'Everyone available is already on the floor.' }));
   }
   auto.forEach(pat => {
@@ -3653,10 +3793,16 @@ function renderBench() {
   ul.replaceChildren();
   const r = S.result;
   if (!r || r.error) return;
-  const startingIds = new Set();
-  ROLES.forEach(role => (r.starters[role] || []).forEach(p => p && startingIds.add(p.id)));
+  // The bench is "who is not on the floor in the rotation you're looking at",
+  // so a starter you subbed out shows up here and can be dragged back.
+  // A starter the libero is covering is not "on the bench" — she's part of the
+  // libero swap — so start from the six on the board, then apply coach subs.
+  const idx = (((S.viewRot || 0) % 6) + 6) % 6;
+  const onFloor = new Set((r.arrangement ? r.arrangement.startOrder : []).filter(Boolean).map(p => p.id));
+  coachPatterns().filter(pt => _patternActiveAt(pt, idx)).forEach(pt => { onFloor.delete(pt.out); onFloor.add(pt.in.id); });
+  if (r.libero && r.libero.player) onFloor.add(r.libero.player.id);
   const benchPlayers = S.players
-    .filter(p => p.available && (p.name || '').trim() && !startingIds.has(p.id))
+    .filter(p => p.available && (p.name || '').trim() && !onFloor.has(p.id))
     .map(p => {
       const role = (p.positions && p.positions[0]) || 'OH';
       return { player: p, value: playerFitForRole(p, role, S.settings || defaultSettings()), skill: playerSkillRaw(p) };
@@ -3970,7 +4116,7 @@ function startSet() {
     starters = S.result.arrangement.startOrder.map(p => p.id);
     liberoId = (S.result.libero && S.result.libero.player) ? S.result.libero.player.id : null;
     plan = (S.lineup.subPatterns || [])
-      .filter(p => p.auto && p.in && p.out)
+      .filter(p => (p.auto || p.coach) && p.in && p.out)
       .map(p => ({ id: p.id, out: p.out, in: p.in.id, trigger: { ...p.trigger }, return: p.return ? { ...p.return } : null }));
   }
   if (starters.length !== 6) return false;

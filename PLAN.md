@@ -827,6 +827,16 @@ WVSSAC §127-3-30.1 makes NFHS the playing rules; §30.10 applies them to middle
 
 Still to verify against the 2025–26 NFHS book (I could not open it): one libero per set; replacement-zone and "one rally between replacements" details. Neither affects the lineup math.
 
+## Round 8 — "How do I save a rotation?" (2026-09-05)
+
+There is no save step: the board is the starting six, rotations 2–6 are derived, and everything is saved on drop. What Derek described ("change rotation 3, keep it, rotate…") is substitutions, so drags now mean the right thing per rotation:
+
+- [x] **Rotation 1** = the starting six (board edits, as before).
+- [x] **Rotations 2–6** = a drag onto a spot is a coach sub from that rotation through the end of the trip (`coachSubDrop` → sub pattern with `coach:true`, return at rotation 0). Dragging the starter back onto her sub (or the sub to the bench) sets the return. Same-spot re-entry enforced; a sub can't be replaced by another sub; court↔court swaps refused outside rotation 1.
+- [x] The court shows the coach's subs (not the conditional everybody-plays ones); the bench shows whoever is off the floor *in that rotation*; the hint under the court says which mode you're in.
+- [x] Coach subs appear in the Sub plan ("Your sub", ✕ to remove), print on the sheet, feed the Bench tab, and the everybody-plays planner works around them (their subs count, their starters are spoken for).
+- [x] Sub patterns now persist/share `in` as an id and relink on load (no stale player copies). 34 tests.
+
 ## Parallel Execution Map
 
 ```

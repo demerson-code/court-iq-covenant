@@ -462,3 +462,112 @@ test.describe('setters play the front row only', () => {
     expect(out.subsUsed).toBe(10);
   });
 });
+
+test.describe('coach subs by drag', () => {
+  test('a drag in rotation 3 is a sub from there through rotation 6; rotation 1 is untouched', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      const setup = (roster) => {
+        window.S.players = roster;
+        window.S.settings.system = '4-2';
+        window.S.settings.level = 'ms';
+        window.S.lineup.everybodyPlays = false;
+        window.S.lineup.subPatterns = [];
+        window.runGenerate({ fresh: true });
+        const r = window.S.result;
+        const onFloor = new Set(r.arrangement.startOrder.map(p => p.id)); onFloor.add(r.libero.player.id);
+        const bench = window.S.players.filter(p => !onFloor.has(p.id));
+        return { r, bench };
+      };
+      const zoneOf = (idx, playerId) => {
+        const eff = window.courtEffective(idx);
+        for (const z of [1, 2, 3, 4, 5, 6]) { const p = window.playerAtZone(eff, z); if (p && p.id === playerId) return z; }
+        return null;
+      };
+      const floorAt = i => { const e = window.courtEffective(i); return e.frontRow.concat(e.backRow).filter(Boolean).map(p => p.id); };
+
+      const { r, bench } = setup(roster);
+      const starter = r.arrangement.startOrder.find(p => p.positions[0] === 'OH'); // an outside: never replaced by the libero
+      const ok = window.coachSubDrop(2, zoneOf(2, starter.id), bench[0].id);
+      const pat = window.S.lineup.subPatterns.find(p => p.coach);
+      return { ok, trigger: pat.trigger.rotationIndex, ret: pat.return.rotationIndex,
+        subIn3: floorAt(2).includes(bench[0].id), subIn6: floorAt(5).includes(bench[0].id), subIn1: floorAt(0).includes(bench[0].id),
+        starterIn1: floorAt(0).includes(starter.id), starterIn3: floorAt(2).includes(starter.id),
+        boardUnchanged: window.S.lineup.board.startOrder.includes(starter.id) && !window.S.lineup.board.startOrder.includes(bench[0].id) };
+    }, ms12);
+    expect(out.ok).toBe(true);
+    expect(out.trigger).toBe(2);
+    expect(out.ret).toBe(0);
+    expect(out).toMatchObject({ subIn3: true, subIn6: true, subIn1: false, starterIn1: true, starterIn3: false, boardUnchanged: true });
+  });
+
+  test('dragging the starter back onto her sub ends the sub there; same-spot rule refuses other spots', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      const setup = (roster) => {
+        window.S.players = roster;
+        window.S.settings.system = '4-2';
+        window.S.settings.level = 'ms';
+        window.S.lineup.everybodyPlays = false;
+        window.S.lineup.subPatterns = [];
+        window.runGenerate({ fresh: true });
+        const r = window.S.result;
+        const onFloor = new Set(r.arrangement.startOrder.map(p => p.id)); onFloor.add(r.libero.player.id);
+        const bench = window.S.players.filter(p => !onFloor.has(p.id));
+        return { r, bench };
+      };
+      const zoneOf = (idx, playerId) => {
+        const eff = window.courtEffective(idx);
+        for (const z of [1, 2, 3, 4, 5, 6]) { const p = window.playerAtZone(eff, z); if (p && p.id === playerId) return z; }
+        return null;
+      };
+      const floorAt = i => { const e = window.courtEffective(i); return e.frontRow.concat(e.backRow).filter(Boolean).map(p => p.id); };
+
+      const { r, bench } = setup(roster);
+      const starter = r.arrangement.startOrder.find(p => p.positions[0] === 'OH'); // an outside: never replaced by the libero
+      const other = r.arrangement.startOrder.find(p => p.id !== starter.id && p.positions[0] === 'OH');
+      window.coachSubDrop(1, zoneOf(1, starter.id), bench[0].id);
+      const before = window.S.lineup.subPatterns.length;
+      const wrongSpot = window.coachSubDrop(3, zoneOf(3, other.id), starter.id);
+      const back = window.coachSubDrop(4, zoneOf(4, bench[0].id), starter.id);
+      const pat = window.S.lineup.subPatterns.find(p => p.coach);
+      return { wrongSpot, back, count: window.S.lineup.subPatterns.length, before, ret: pat.return.rotationIndex,
+        starterBack5: floorAt(4).includes(starter.id), subGone5: !floorAt(4).includes(bench[0].id), subIn4: floorAt(3).includes(bench[0].id) };
+    }, ms12);
+    expect(out.wrongSpot).toBe(false);
+    expect(out.back).toBe(true);
+    expect(out.count).toBe(out.before);
+    expect(out.ret).toBe(4);
+    expect(out).toMatchObject({ starterBack5: true, subGone5: true, subIn4: true });
+  });
+
+  test('the everybody-plays plan works around coach subs', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      const setup = (roster) => {
+        window.S.players = roster;
+        window.S.settings.system = '4-2';
+        window.S.settings.level = 'ms';
+        window.S.lineup.everybodyPlays = false;
+        window.S.lineup.subPatterns = [];
+        window.runGenerate({ fresh: true });
+        const r = window.S.result;
+        const onFloor = new Set(r.arrangement.startOrder.map(p => p.id)); onFloor.add(r.libero.player.id);
+        const bench = window.S.players.filter(p => !onFloor.has(p.id));
+        return { r, bench };
+      };
+      const zoneOf = (idx, playerId) => {
+        const eff = window.courtEffective(idx);
+        for (const z of [1, 2, 3, 4, 5, 6]) { const p = window.playerAtZone(eff, z); if (p && p.id === playerId) return z; }
+        return null;
+      };
+      const floorAt = i => { const e = window.courtEffective(i); return e.frontRow.concat(e.backRow).filter(Boolean).map(p => p.id); };
+
+      const { r, bench } = setup(roster);
+      const starter = r.arrangement.startOrder.find(p => p.positions[0] === 'OH'); // an outside: never replaced by the libero
+      window.coachSubDrop(2, zoneOf(2, starter.id), bench[0].id);
+      const plan = window.planEverybodyPlays(window.S, window.S.result);
+      return { outs: plan.patterns.map(p => p.out), ins: plan.patterns.map(p => p.in.id), starter: starter.id, sub: bench[0].id, subsUsed: plan.subsUsed };
+    }, ms12);
+    expect(out.outs).not.toContain(out.starter);
+    expect(out.ins).not.toContain(out.sub);
+    expect(out.subsUsed).toBe(2 + out.outs.length * 2);
+  });
+});

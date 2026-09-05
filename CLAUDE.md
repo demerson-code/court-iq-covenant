@@ -141,7 +141,10 @@ travels with the team. "Suggest lineup" runs `generateLineup` once and writes
 the board; after that drags edit the board directly (`boardPutPlayer`,
 `boardSwap`) and `resultFromBoard()` re-scores it into the same result shape
 `generateLineup` returns, so every renderer downstream is board-agnostic.
-Nothing else moves on a drag. **Do not reintroduce pins/overrides** — Derek
+Nothing else moves on a drag in rotation 1. **In rotations 2–6 a drag is a
+coach substitution** (`coachSubDrop` / `coachSubOut` → sub pattern with
+`coach:true`); the court view (`courtEffective`) shows starters + coach subs
++ libero, never the automatic plan. **Do not reintroduce pins/overrides** — Derek
 rejected them (2026-09-05): `S.lineup.overrides` is legacy and always empty.
 
 The main view is ONE rotation (`renderCourtView`, `S.viewRot` in memory only):

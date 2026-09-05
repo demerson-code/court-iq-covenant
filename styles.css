@@ -2533,3 +2533,8 @@ body.dragging-court .bench-drop-zone { display: block; }
 .rot-chip-libero { cursor: default; }
 .rot-chip-empty { border-style: dashed; color: var(--text-mute); justify-content: center; align-items: center; min-height: 48px; }
 .big-rot-court .rot-chip-empty { font-size: 22px; }
+
+/* ===== Round 8: coach subs ===== */
+.sub-plan-row.is-coach { border-color: var(--brand); background: rgba(var(--brand-rgb), 0.05); }
+.sub-plan-row.is-coach::before { background: var(--brand-dark); content: '✓'; }
+.court-hint strong { color: var(--text); }
