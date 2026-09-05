@@ -799,6 +799,11 @@ Derek reviewed the preview and asked for four changes. All built and verified:
 - [x] **Jersey # hidden by default.** `settings.v = 2`; saves without `v` get `showJersey` flipped off once. Advanced toggle still turns it on.
 - [x] **AVG on every big-court chip** (bottom-right). Pin marker moved to the top-right so it no longer covers the zone number.
 
+## Round 4 — coach-side feedback (2026-09-05)
+
+- [x] **"Why Darcy over Ellie?"** — she was pinned. Pins are now impossible to miss: the zone label says PINNED in amber, and the status line under Generate counts pins and points at Clear pins. Chips playing out of position say so ("Outside · playing Middle") because 4-2 fills two middle slots even from a roster with no middles.
+- [x] **Bench full width** under the court, as a grid of cards; the score card keeps the side column alone.
+
 ## Parallel Execution Map
 
 ```

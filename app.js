@@ -2857,8 +2857,11 @@ function renderLineup() {
   }
   wrap.hidden = false;
   if (status) {
-    status.textContent = '';
-    status.className = 'lineup-status';
+    const pins = (S.lineup.overrides || []).length;
+    status.textContent = pins
+      ? `${pins} ${pins === 1 ? 'player is' : 'players are'} pinned — the lineup is built around ${pins === 1 ? 'her' : 'them'}. Tap Clear pins to let the optimizer choose.`
+      : '';
+    status.className = 'lineup-status' + (pins ? ' lineup-status-pins' : '');
   }
   renderCourtView();
   renderRotationGrid();
@@ -2921,7 +2924,7 @@ function renderCourtView() {
     if (z === 1) cellCls.push('rot-zone-server');
     if (overridden) cellCls.push('rot-zone-override');
     if (isLibero) cellCls.push('rot-zone-libero');
-    const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${POSITION_NAMES[z]}` });
+    const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${POSITION_NAMES[z]}${overridden ? ' · PINNED' : ''}` });
     const chip = buildPlayerChip(player, idx, z, false, true);
     grid.appendChild(el('div', { cls: cellCls.join(' '), dataset: { rotIdx: String(idx), zone: String(z) } }, [zoneLabel, chip]));
   }
@@ -3005,7 +3008,7 @@ function renderRotationGrid() {
       if (overridden) cellCls.push('rot-zone-override');
       if (isLibero) cellCls.push('rot-zone-libero');
 
-      const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${ZONE_LABELS[z]}` });
+      const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${ZONE_LABELS[z]}${overridden ? ' · PINNED' : ''}` });
       const chip = buildPlayerChip(player, idx, z, player && subbedIn.has(player.id));
       const cell = el('div', {
         cls: cellCls.join(' '),
@@ -3057,6 +3060,12 @@ function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false) 
   if (isSub) cls.push('rot-chip-sub');
   // Jersey first: at the bench a coach knows girls by number.
   const chipName = (S.settings?.showJersey && player.jersey) ? `#${player.jersey} ${firstName}` : firstName;
+  // "Outside · playing Middle" — 4-2 needs two middles even when the roster
+  // has none, and the coach should see who's filling in where.
+  const assigned = S.result && S.result.roleOf && S.result.roleOf[player.id];
+  const roleText = isSub ? 'SUB'
+    : (assigned && assigned !== role && assigned !== 'L') ? `${roleLabel(role)} · playing ${roleLabel(assigned)}`
+    : roleLabel(assigned || role);
   const chip = el('div', {
     cls: cls.join(' '),
     dataset: { playerId: player.id, rotIdx: String(rotIdx), zone: String(zone) },
@@ -3066,7 +3075,7 @@ function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false) 
     }
   }, [
     el('span', { cls: 'rot-chip-name', text: chipName }),
-    el('span', { cls: 'rot-chip-role', text: isSub ? 'SUB' : roleLabel(role) }),
+    el('span', { cls: 'rot-chip-role', text: roleText }),
     fullName ? el('span', { cls: 'rot-chip-avg', text: avgSkillDisplay(player), title: 'Average of the six skills' }) : null
   ]);
   return chip;
