@@ -2541,3 +2541,7 @@ body.dragging-court .bench-drop-zone { display: block; }
 
 /* ===== Round 9: plan heading ===== */
 .sub-plan-heading { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-mute); padding: 8px 2px 0; list-style: none; }
+
+/* ===== Round 10: libero says who she's covering ===== */
+.rot-zone-libero .rot-chip-role { color: var(--brand-text); }
+@media print { .rl-for { font-size: 8pt; color: #444; } }

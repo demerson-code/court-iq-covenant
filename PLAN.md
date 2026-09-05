@@ -841,6 +841,10 @@ There is no save step: the board is the starting six, rotations 2–6 are derive
 
 - [x] Derek: the printout showed subs he never made (Ansley, LuLu). Cause: the printed rotations and the six-rotation grid baked in the automatic everybody-plays plan while the big court showed only his subs. Now every rotation diagram (court, grid, print) is starters + coach subs + libero; the automatic plan prints as its own labeled table ("If we're ahead — planned subs") and is headed the same way in the Sub plan list. Optimizer mode dropped from the MS print header.
 
+## Round 10 — "Lyla is missing" (2026-09-05)
+
+- [x] The starter the libero covers was invisible: her chip showed the libero, and she's deliberately not on the bench. The libero chip now reads "Libero · in for Lyla" on the court and in the grid, and the print cell says "L Emilia for Lyla".
+
 ## Parallel Execution Map
 
 ```

@@ -2403,13 +2403,14 @@ function buildPrintLineupDOM() {
   const patterns = S.lineup.subPatterns || [];
   const coach = coachPatterns();
   const tagOf = (p) => (S.settings?.showJersey && p.jersey) ? '#' + p.jersey + ' ' : '';
-  const cell = (p) => {
+  const cell = (p, covered) => {
     if (!p) return el('td');
     const td = el('td');
     const role = (p.positions && p.positions[0]) || '';
     const isLib = lib && p.id === lib.id;
     td.appendChild(el('span', { cls: 'rl' + (p._sub ? ' rl-sub' : ''), text: isLib ? 'L' : (p._sub ? 'SUB' : roleCode(role)) }));
     td.appendChild(document.createTextNode(' ' + tagOf(p) + (p.name || '—')));
+    if (isLib && covered && covered.id !== p.id) td.appendChild(el('span', { cls: 'rl-for', text: ' for ' + covered.name }));
     return td;
   };
 
@@ -2418,10 +2419,12 @@ function buildPrintLineupDOM() {
     // Same as the big court: starting six, the coach's subs, the libero.
     // The automatic "if we're ahead" plan is printed as a table below, not
     // baked into the diagrams — the sheet must match what the coach built.
-    const rot = effectiveRotationWithLibero(applySubPatterns(raw, coach, i), r.libero, level, i);
+    const pre = applySubPatterns(raw, coach, i);
+    const rot = effectiveRotationWithLibero(pre, r.libero, level, i);
     const sc = (r.perRotationScores[i] || 0).toFixed(1);
     const fr = rot.frontRow || [];
     const br = rot.backRow || [];
+    const pbr = pre.backRow || [];
     const rotEl = el('div', { cls: 'print-rot' }, [
       el('div', { cls: 'print-rot-head' }, [
         el('span', { text: 'Rotation ' + (i + 1) }),
@@ -2432,7 +2435,7 @@ function buildPrintLineupDOM() {
           el('tr', {}, [el('th', { text: '4' }), el('th', { text: '3' }), el('th', { text: '2' })]),
           el('tr', {}, [cell(fr[0]), cell(fr[1]), cell(fr[2])]),
           el('tr', {}, [el('th', { text: '5' }), el('th', { text: '6' }), el('th', { text: '1' })]),
-          el('tr', {}, [cell(br[0]), cell(br[1]), cell(br[2])])
+          el('tr', {}, [cell(br[0], pbr[0]), cell(br[1], pbr[1]), cell(br[2], pbr[2])])
         ])
       ])
     ]);
@@ -3140,6 +3143,7 @@ function renderCourtView() {
   }
 
   const eff = courtEffective(idx);
+  const preLibero = applySubPatterns(r.arrangement.rotations[idx], coachPatterns(), idx);
   const coachIn = new Set(coachPatterns().filter(pt => _patternActiveAt(pt, idx)).map(pt => pt.in.id));
   const grid = el('div', { cls: 'rot-court big-rot-court' });
   for (const z of [4, 3, 2, 5, 6, 1]) {
@@ -3149,7 +3153,8 @@ function renderCourtView() {
     if (z === 1) cellCls.push('rot-zone-server');
     if (isLibero) cellCls.push('rot-zone-libero');
     const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${POSITION_NAMES[z]}` });
-    const chip = buildPlayerChip(player, idx, z, !!(player && coachIn.has(player.id)), true);
+    const covered = isLibero ? playerAtZone(preLibero, z) : null;
+    const chip = buildPlayerChip(player, idx, z, !!(player && coachIn.has(player.id)), true, covered ? covered.name : null);
     grid.appendChild(el('div', { cls: cellCls.join(' '), dataset: { rotIdx: String(idx), zone: String(z) } }, [zoneLabel, chip]));
   }
   court.appendChild(grid);
@@ -3246,7 +3251,8 @@ function renderRotationGrid() {
       if (isLibero) cellCls.push('rot-zone-libero');
 
       const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${ZONE_LABELS[z]}` });
-      const chip = buildPlayerChip(player, idx, z, player && subbedIn.has(player.id));
+      const coveredG = isLibero ? playerAtZone(afterSubs, z) : null;
+      const chip = buildPlayerChip(player, idx, z, player && subbedIn.has(player.id), false, coveredG ? coveredG.name : null);
       const cell = el('div', {
         cls: cellCls.join(' '),
         dataset: { rotIdx: String(idx), zone: String(z) }
@@ -3311,7 +3317,7 @@ function isZoneOverridden(rotIdx, zone) {
   return (S.lineup.overrides || []).some(o => o.rotationIndex === rotIdx && o.zone === zone);
 }
 
-function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false) {
+function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false, coveredName = null) {
   if (!player) {
     return el('div', { cls: 'rot-chip rot-chip-empty', text: '—' });
   }
@@ -3325,6 +3331,7 @@ function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false) 
   // has none, and the coach should see who's filling in where.
   const assigned = S.result && S.result.roleOf && S.result.roleOf[player.id];
   const roleText = isSub ? 'SUB'
+    : coveredName ? `Libero · in for ${coveredName}`
     : (assigned && assigned !== role && assigned !== 'L') ? `${roleLabel(role)} · playing ${roleLabel(assigned)}`
     : roleLabel(assigned || role);
   const isLiberoChip = !!(S.result && S.result.libero && S.result.libero.player && S.result.libero.player.id === player.id);
