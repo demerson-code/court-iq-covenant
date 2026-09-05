@@ -603,3 +603,30 @@ test.describe('libero covers players', () => {
     expect(serveHeld).toBeLessThanOrEqual(1);
   });
 });
+
+test.describe('coach subs cannot overlap', () => {
+  test('a later sub for the same player blocks an earlier overlapping one, and the floor never seats her twice', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster; window.S.settings.system = '4-2'; window.S.settings.level = 'ms';
+      window.S.lineup.everybodyPlays = false; window.S.lineup.subPatterns = [];
+      window.runGenerate({ fresh: true });
+      const r = window.S.result; const onFloor = new Set(r.arrangement.startOrder.map(p => p.id)); onFloor.add(r.libero.player.id);
+      const bench = window.S.players.filter(p => !onFloor.has(p.id));
+      const zoneOf = (idx, id) => { const e = window.courtEffective(idx); for (const z of [1,2,3,4,5,6]) { const p = window.playerAtZone(e, z); if (p && p.id === id) return z; } return null; };
+      const [A, B] = r.arrangement.startOrder.filter(p => p.positions[0] === 'OH');
+      const darcy = bench[0];
+      const first = window.coachSubDrop(4, zoneOf(4, A.id), darcy.id);      // Darcy in for A from rotation 5
+      const second = window.coachSubDrop(1, zoneOf(1, B.id), darcy.id);     // Darcy in for B from rotation 2 -> would overlap at 5-6
+      const count = window.S.lineup.subPatterns.filter(p => p.coach).length;
+      // force an overlapping pair straight into state to prove the floor guard
+      window.S.lineup.subPatterns.push({ id: 'x', out: B.id, in: darcy, trigger: { rotationIndex: 1, event: 'in' }, return: { rotationIndex: 0, event: 'in' }, coach: true });
+      window.runGenerate();
+      const dup = [0,1,2,3,4,5].map(i => { const e = window.courtEffective(i); return e.frontRow.concat(e.backRow).filter(p => p && p.id === darcy.id).length; });
+      return { first, second, count, dup };
+    }, ms12);
+    expect(out.first).toBe(true);
+    expect(out.second).toBe(false);
+    expect(out.count).toBe(1);
+    for (const n of out.dup) expect(n).toBeLessThanOrEqual(1);
+  });
+});

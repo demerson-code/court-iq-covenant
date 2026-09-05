@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.05-12';
+const APP_VERSION = '2026.09.05-13';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -1428,6 +1428,8 @@ function applySubPatterns(rotation, patterns, rotationIndex) {
     if (!_patternActiveAt(pat, rotationIndex)) continue;
     const outId = pat.out;
     if (!outId || !pat.in) continue;
+    // Never seat the same player twice — an overlapping pattern is a no-op.
+    if (out.frontRow.concat(out.backRow).some(p => p && p.id === pat.in.id)) continue;
     // Shallow copy tagged _sub so the libero never displaces a player who
     // was just subbed in (she'd never actually play). Comparisons are by id.
     const inPlayer = { ...pat.in, _sub: true };
@@ -1723,6 +1725,22 @@ function coachSubDrop(idx, zone, inId) {
   if (eff.frontRow.concat(eff.backRow).some(pl => pl && pl.id === inId)) {
     toast('She\u2019s already on the floor.', 2400);
     return false;
+  }
+  // The new sub runs from here through rotation 6. She can't already be on
+  // the floor anywhere in that stretch, and the starter can't already have
+  // someone else coming in for her in that stretch.
+  for (let i = idx; i < 6; i++) {
+    const floor = courtEffective(i);
+    const ids = floor.frontRow.concat(floor.backRow).filter(Boolean).map(pl => pl.id);
+    if (ids.includes(inId)) {
+      toast(`${inP.name} is already on the floor in rotation ${i + 1} — bring her out there first.`, 3600);
+      return false;
+    }
+    const other = coach.find(pt => pt.out === target.id && _patternActiveAt(pt, i));
+    if (other) {
+      toast(`${other.in.name} already comes in for ${target.name} at rotation ${other.trigger.rotationIndex + 1} — remove that sub first.`, 3600);
+      return false;
+    }
   }
   S.lineup.subPatterns.push({
     id: 'coach_' + genId(),

@@ -856,6 +856,10 @@ Could not reproduce: pointer-event drags (rotation-1 swap, rotation-3 sub) then 
 - [x] `APP_VERSION` stamp in the topbar tooltip and the print footer; `?v=` cache-busters on `app.js` / `styles.css`; `bump-version.py`.
 - [x] Load is newest-wins: if localStorage is newer than the address-bar link, local wins and the bar is re-synced (a reload 400ms after a drag, or an old bookmark, can no longer roll a change back). Address-bar sync is flushed on `pagehide`/`beforeunload`.
 
+## Round 13 — "Darcy in twice" (2026-09-05)
+
+- [x] Two coach subs for the same bench player could overlap (one made from a later rotation first, then one from an earlier rotation "through 6"). `coachSubDrop` now checks the whole span — she can't already be on the floor anywhere from this rotation to 6, and the starter can't already have someone coming in — and `applySubPatterns` never seats a player who is already on the floor, which repairs existing saves.
+
 ## Parallel Execution Map
 
 ```
