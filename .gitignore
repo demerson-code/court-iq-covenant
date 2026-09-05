@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+*.log
+.vscode/
+.idea/
+.claude/
+
+# Playwright test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
