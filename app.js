@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.05-14';
+const APP_VERSION = '2026.09.05-15';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -2601,6 +2601,27 @@ function onDragStart(opts, e) {
   };
   // Capture so move/up arrive even if pointer leaves the source
   try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+  markLegalSpots(opts);
+}
+
+/* While dragging a player who was subbed out, light up the one spot the
+   re-entry rule lets her return to (where her replacement is) and dim the
+   rest — so the rule shows itself before the drop, not after. */
+function markLegalSpots(opts) {
+  clearLegalSpots();
+  if (!opts || opts.kind !== 'bench' || !S.result || !S.result.arrangement) return;
+  const idx = (((S.viewRot || 0) % 6) + 6) % 6;
+  if (idx === 0) return; // rotation 1 is the starting six — anything goes
+  const pat = coachPatterns().find(pt => pt.out === opts.playerId && _patternActiveAt(pt, idx));
+  if (!pat) return;
+  document.querySelectorAll('#bigCourt .rot-zone').forEach(z => {
+    const chip = z.querySelector('.rot-chip');
+    const legal = chip && chip.dataset.playerId === pat.in.id;
+    z.classList.add(legal ? 'zone-legal' : 'zone-illegal');
+  });
+}
+function clearLegalSpots() {
+  document.querySelectorAll('.zone-legal, .zone-illegal').forEach(z => z.classList.remove('zone-legal', 'zone-illegal'));
 }
 
 function onDragMove(e) {
@@ -2640,7 +2661,10 @@ function onDragEnd(e) {
     ds.sourceEl?.classList.remove('drag-source');
     if (ds.ghost) ds.ghost.remove();
     clearDropHighlight();
+    clearLegalSpots();
     if (target) performDrop(ds, target);
+  } else {
+    clearLegalSpots();
   }
 }
 

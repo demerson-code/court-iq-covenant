@@ -860,6 +860,11 @@ Could not reproduce: pointer-event drags (rotation-1 swap, rotation-3 sub) then 
 
 - [x] Two coach subs for the same bench player could overlap (one made from a later rotation first, then one from an earlier rotation "through 6"). `coachSubDrop` now checks the whole span — she can't already be on the floor anywhere from this rotation to 6, and the starter can't already have someone coming in — and `applySubPatterns` never seats a player who is already on the floor, which repairs existing saves.
 
+## Rounds 14–15 — refusals you can read (2026-09-05)
+
+- [x] `refuse()`: red toast, 6.5s, plain-English rule text (re-entry, both-on-the-floor, sub-for-a-sub, libero).
+- [x] While dragging a subbed-out player in rotations 2–6, the one spot she may re-enter (her replacement's) is outlined green and the rest dim.
+
 ## Parallel Execution Map
 
 ```

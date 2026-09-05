@@ -2561,3 +2561,8 @@ body.dragging-court .bench-drop-zone { display: block; }
 
 /* ===== Round 14: refusals you can actually read ===== */
 .toast.toast-refuse { background: var(--bad); color: #fff; font-weight: 700; max-width: min(92vw, 560px); line-height: 1.35; padding: 14px 18px; }
+
+/* ===== Round 15: the re-entry rule shows itself while dragging ===== */
+.rot-zone.zone-illegal { opacity: 0.4; }
+.rot-zone.zone-legal { outline: 3px solid var(--good); outline-offset: -3px; background: rgba(30, 158, 79, 0.08); }
+.rot-zone.zone-legal::after { content: 'SHE CAN COME BACK IN HERE'; position: absolute; left: 6px; bottom: 4px; font-size: 8px; font-weight: 800; letter-spacing: 0.4px; color: var(--good); }
