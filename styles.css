@@ -2558,3 +2558,6 @@ body.dragging-court .bench-drop-zone { display: block; }
 
 /* ===== Round 12: version stamp ===== */
 @media print { .print-version { font-size: 7.5pt; color: #777; margin: 4pt 0 8pt; } }
+
+/* ===== Round 14: refusals you can actually read ===== */
+.toast.toast-refuse { background: var(--bad); color: #fff; font-weight: 700; max-width: min(92vw, 560px); line-height: 1.35; padding: 14px 18px; }

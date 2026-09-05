@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.05-13';
+const APP_VERSION = '2026.09.05-14';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -1697,7 +1697,7 @@ function coachSubDrop(idx, zone, inId) {
     // An empty spot means a starter went unavailable — fill the starting six instead.
     return boardPutPlayer(idx, zone, inId);
   }
-  if (target.id === libId) { toast('The libero swaps on her own — change her under Libero.', 3000); return false; }
+  if (target.id === libId) { refuse('The libero swaps on her own — change who she covers under Libero.'); return false; }
   if (inId === libId) { toast('She\u2019s the libero — change that under Libero first.', 3000); return false; }
   const coach = coachPatterns();
   // Return leg: the starter comes back in for the girl who replaced her.
@@ -1714,12 +1714,12 @@ function coachSubDrop(idx, zone, inId) {
     return true;
   }
   if (coach.some(pt => pt.in.id === target.id && _patternActiveAt(pt, idx))) {
-    toast(`${target.name} is a sub — bring the starter back first.`, 3200);
+    refuse(`${target.name} is a sub herself — bring the starter back in first, then sub for her.`);
     return false;
   }
   const outPat = coach.find(pt => pt.out === inId && _patternActiveAt(pt, idx));
   if (outPat) {
-    toast(`${inP.name} can only come back in for ${outPat.in.name} (same spot rule).`, 3200);
+    refuse(`${inP.name} went out for ${outPat.in.name}, so she can only come back in for ${outPat.in.name} — that's the re-entry rule.`);
     return false;
   }
   if (eff.frontRow.concat(eff.backRow).some(pl => pl && pl.id === inId)) {
@@ -1733,12 +1733,12 @@ function coachSubDrop(idx, zone, inId) {
     const floor = courtEffective(i);
     const ids = floor.frontRow.concat(floor.backRow).filter(Boolean).map(pl => pl.id);
     if (ids.includes(inId)) {
-      toast(`${inP.name} is already on the floor in rotation ${i + 1} — bring her out there first.`, 3600);
+      refuse(`${inP.name} is already on the floor in rotation ${i + 1} — bring her out there first.`);
       return false;
     }
     const other = coach.find(pt => pt.out === target.id && _patternActiveAt(pt, i));
     if (other) {
-      toast(`${other.in.name} already comes in for ${target.name} at rotation ${other.trigger.rotationIndex + 1} — remove that sub first.`, 3600);
+      refuse(`${other.in.name} already comes in for ${target.name} at rotation ${other.trigger.rotationIndex + 1} — remove that sub first.`);
       return false;
     }
   }
@@ -1767,7 +1767,7 @@ function liberoCoverDrop(idx, zone) {
   let target = playerAtZone(eff, zone);
   if (target && target.id === lib.id) target = playerAtZone(pre, zone); // she's already there: toggle off
   if (!target) return false;
-  if (target._sub) { toast('She covers starters, not subs.', 2600); return false; }
+  if (target._sub) { refuse('The libero covers starters, not subs.'); return false; }
   const cfg = S.lineup.liberoConfig;
   const covers = Array.isArray(cfg.covers) ? cfg.covers.slice() : [];
   const at = covers.indexOf(target.id);
@@ -1783,7 +1783,7 @@ function liberoCoverDrop(idx, zone) {
    she's a coach sub, the starter comes back here. */
 function coachSubOut(idx, playerId) {
   const pat = coachPatterns().find(pt => pt.in.id === playerId && _patternActiveAt(pt, idx));
-  if (!pat) { toast('Drag a bench player onto her spot to sub her out.', 3000); return false; }
+  if (!pat) { refuse('She’s a starter. To take her out, drag a bench player onto her spot.'); return false; }
   const byId = new Map(S.players.map(p => [p.id, p]));
   if (pat.trigger.rotationIndex === idx) S.lineup.subPatterns = S.lineup.subPatterns.filter(x => x !== pat);
   else pat.return = { rotationIndex: idx, event: 'in' };
@@ -2767,12 +2767,18 @@ function performDrop(source, target) {
   if (source.kind === 'court' && target.kind === 'zone') {
     if (source.rotIdx === target.rotIdx && source.zone === target.zone) return;
     if (source.rotIdx === 0 && target.rotIdx === 0) { if (boardSwap(0, source.zone, 0, target.zone)) toast('Swapped.'); }
-    else toast('Positions come from the starting order — swap players in rotation 1. In later rotations, drag from the bench to sub.', 3600);
+    else {
+      const byId = new Map(S.players.map(p => [p.id, p]));
+      const a = byId.get(source.playerId);
+      const tEff = courtEffective(target.rotIdx);
+      const b = tEff ? playerAtZone(tEff, target.zone) : null;
+      refuse(`${a ? a.name : 'She'} and ${b ? b.name : 'she'} are both on the floor, so one can't sub for the other. To swap their spots, do it in rotation 1. To take ${b ? b.name : 'her'} out here, drag someone from the bench onto her.`);
+    }
     return;
   }
   // court → bench
   if (source.kind === 'court' && target.kind === 'bench') {
-    if (startingSix) toast('Drag a bench player onto her spot instead — you need six on the floor.', 3200);
+    if (startingSix) refuse('You need six on the floor — drag a bench player onto her spot instead.');
     else coachSubOut(source.rotIdx, source.playerId);
     return;
   }
@@ -4546,9 +4552,16 @@ function setTab(name) {
 function toast(msg, ms = 2200) {
   const t = $('#toast');
   t.textContent = msg;
+  t.classList.remove('toast-refuse');
   t.hidden = false;
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.hidden = true, ms);
+}
+/* refuse: a drag the rules don't allow. Stays up long enough to read, and
+   looks different from a plain confirmation. */
+function refuse(msg) {
+  toast(msg, 6500);
+  $('#toast').classList.add('toast-refuse');
 }
 
 function confirmDialog(title, msg) {
