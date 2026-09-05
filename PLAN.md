@@ -403,7 +403,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
 
 ### Tasks
 
-- [ ] **2.1 — Register systems.** `app.js:797`:
+- [x] **2.1 — Register systems.** `app.js:797`:
   ```js
   const SYSTEM_REQUIREMENTS = {
     '4-2':   { S: 2, OPP: 0, OH: 2, MB: 2, L: 1 },  // same six as 6-2; differs in scoring (2.2)
@@ -423,7 +423,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   }
   ```
 
-- [ ] **2.2 — Row-aware scoring role.** This is what makes 4-2 ≠ 6-2. Add above `scoreRotation`:
+- [x] **2.2 — Row-aware scoring role.** This is what makes 4-2 ≠ 6-2. Add above `scoreRotation`:
   ```js
   /* roleForScoring: which weight profile a player is scored with, given the
      row she's in and the system. A setter only "is" the setter in the row
@@ -441,7 +441,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   `scoreRotation(rotation, mode, libero, ruleset, settings, system)` gains a `system` param; the two `const role = ...` lines become `roleForScoring(p, 'front', system)` / `roleForScoring(p, 'back', system)`. `scoreLineup` passes `system` through; `generateLineup` passes it in. The 5-1 / 6-2 fixtures must still pass unchanged — 5-1 scoring is identical; 6-2 back-row setter was already scored as S, front-row setter now scores as OPP (previously S). Re-baseline the 6-2 maximin assertion if it moves; the *composition* assertion cannot move.
 
-- [ ] **2.3 — Simple 6.** New functions after `chooseStarters`:
+- [x] **2.3 — Simple 6.** New functions after `chooseStarters`:
   ```js
   /* Simple 6: no positions, no system. Best six by raw skill (+ tiebreak),
      pins honoured, libero = best libero-fit among the rest when 7+ are here. */
@@ -473,9 +473,9 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   In `generateLineup`: `const minRoster = system === 'simple' ? 6 : 7;` for the roster-size check; branch `system === 'simple' ? chooseSimpleStarters(roster, settings, forced) : chooseStarters(...)`. Libero for simple is `starters.L[0] || null` — the existing default path already does this. `renderLineupBreakdown` iterates `ROLES` — works as-is since simple buckets starters by primary.
 
-- [ ] **2.4 — Libero may replace a back-row setter (4-2).** `renderLiberoPanel` (`app.js:2509`): the "replaces" checkbox list currently offers `['MB','OPP','OH','DS']` (confirm at implementation) — add `'S'` when system is `4-2` or `simple`, with hint "In a 4-2 the back-row setter isn't setting — the libero can take her spot."
+- [x] **2.4 — Libero may replace a back-row setter (4-2).** `renderLiberoPanel` (`app.js:2509`): the "replaces" checkbox list currently offers `['MB','OPP','OH','DS']` — already includes `'S'`; nothing to do, with hint "In a 4-2 the back-row setter isn't setting — the libero can take her spot."
 
-- [ ] **2.5 — Default system + picker.** `index.html` both system selects:
+- [x] **2.5 — Default system + picker.** `index.html` both system selects:
   ```html
   <option value="4-2" data-system="4-2">4-2 — setter sets from the front row</option>
   <option value="simple" data-system="simple">Simple 6 — best six, normal rotation</option>

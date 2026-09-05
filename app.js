@@ -156,7 +156,7 @@ function defaultSettings() {
   return {
     level: 'ms',
     levelOverrides: {},          // { subsPerSet?, leadThreshold?, liberoMayServe? }
-    system: '5-1',               // Block 2 flips the default to '4-2' once it exists
+    system: '4-2',
     showJersey: true,
     showSetterTempo: false
   };
@@ -219,7 +219,7 @@ let S = {
 };
 
 const VALID_TABS = new Set(['roster', 'lineup', 'scrimmage', 'bench']); // 'bench' arrives in Block 5
-const VALID_SYSTEMS = new Set(['5-1', '6-2']); // Block 2 adds '4-2' and 'simple'
+const VALID_SYSTEMS = new Set(['4-2', 'simple', '5-1', '6-2']); // keep in step with SYSTEM_REQUIREMENTS
 
 const SORT_MODES = new Set(['avg-desc', 'avg-asc', 'name-asc', 'name-desc']);
 
@@ -460,7 +460,7 @@ function applyLoadedState(data) {
       level: LEVELS[data.settings.level] ? data.settings.level : 'ms',
       levelOverrides: (data.settings.levelOverrides && typeof data.settings.levelOverrides === 'object')
         ? data.settings.levelOverrides : {},
-      system: VALID_SYSTEMS.has(data.settings.system) ? data.settings.system : '5-1'
+      system: VALID_SYSTEMS.has(data.settings.system) ? data.settings.system : '4-2'
     };
   }
   if (data.lineup && typeof data.lineup === 'object') {
@@ -902,8 +902,10 @@ async function copyShareUrl() {
 */
 
 const SYSTEM_REQUIREMENTS = {
-  '5-1': { S: 1, OPP: 1, OH: 2, MB: 2, L: 1 },
-  '6-2': { S: 2, OPP: 0, OH: 2, MB: 2, L: 1 }
+  '4-2':    { S: 2, OPP: 0, OH: 2, MB: 2, L: 1 },  // same six as 6-2; differs in who is scored as the setter
+  'simple': { ANY: 6, L: 1 },                       // handled by chooseSimpleStarters, not the role solver
+  '5-1':    { S: 1, OPP: 1, OH: 2, MB: 2, L: 1 },
+  '6-2':    { S: 2, OPP: 0, OH: 2, MB: 2, L: 1 }
 };
 
 // Per-call memo cleared at the top of generateLineup.
@@ -1135,6 +1137,38 @@ function chooseStarters(roster, system, mode, settings, forced, ruleset, pairing
   };
 }
 
+/* Simple 6: no positions, no system. Best six by raw skill (+ tiebreak),
+   pins honoured, libero = best libero-fit among the rest when 7+ are here.
+   Starters are bucketed by primary role so every renderer that walks ROLES
+   keeps working; `_order` carries the six for the arrangement enumerator. */
+function chooseSimpleStarters(roster, settings, forced) {
+  const forcedPlayers = (forced || []).map(f => f.player).filter(Boolean);
+  const forcedIds = new Set(forcedPlayers.map(p => p.id));
+  const ranked = roster
+    .filter(p => !forcedIds.has(p.id))
+    .sort((a, b) => (playerSkillRaw(b) + tiebreak(b)) - (playerSkillRaw(a) + tiebreak(a)));
+  const six = forcedPlayers.concat(ranked).slice(0, 6);
+  if (six.length < 6) return { starters: null, validation: `Need 6 available players (you have ${six.length}).` };
+  const rest = roster.filter(p => !six.includes(p));
+  const lib = rest.length
+    ? rest.slice().sort((a, b) => playerFitForRole(b, 'L', settings) - playerFitForRole(a, 'L', settings))[0]
+    : null;
+  const starters = { OH: [], MB: [], S: [], OPP: [], L: lib ? [lib] : [], DS: [] };
+  six.forEach(p => { const r = (p.positions && p.positions[0]) || 'OH'; (starters[r] || starters.OH).push(p); });
+  starters._order = six;
+  return { starters, validation: null };
+}
+
+function _enumerateSimpleArrangements(starters) {
+  const six = starters._order || ROLES.flatMap(r => starters[r] || []).slice(0, 6);
+  const out = [];
+  (function perm(arr, m) {
+    if (arr.length === 0) { out.push({ startOrder: m.slice(), rotations: _rotationsFromStartOrder(m) }); return; }
+    for (let i = 0; i < arr.length; i++) perm(arr.slice(0, i).concat(arr.slice(i + 1)), m.concat(arr[i]));
+  })(six, []);
+  return out; // 720 arrangements x 6 rotations — trivially fast
+}
+
 /* Compute 6 rotations from a starting zone-1..6 order.
    Volleyball rotation moves clockwise: zone 2 -> 1, 1 -> 6, ..., 3 -> 2.
    So zone z in rotation r is occupied by the player who started at zone
@@ -1221,13 +1255,28 @@ function _enumerate62Arrangements(starters) {
 
 function arrangeRotation(starters, system) {
   if (system === '5-1') return _enumerate51Arrangements(starters);
-  if (system === '6-2') return _enumerate62Arrangements(starters);
+  if (system === '6-2' || system === '4-2') return _enumerate62Arrangements(starters); // setters opposite each other
+  if (system === 'simple') return _enumerateSimpleArrangements(starters);
   return [];
 }
 
-/* scoreRotation: applies libero swap (per ruleset rules) then sums per-player
+/* roleForScoring: which weight profile a player is scored with, given the
+   row she's in and the system. A setter only "is" the setter in the row she
+   sets from — 4-2 sets from the front, 6-2 from the back, 5-1 from both. The
+   other setter is scored as an ordinary player in that row. This is the whole
+   difference between 4-2 and 6-2; their arrangements are identical. */
+function roleForScoring(player, row, system) {
+  const primary = (player.positions && player.positions[0]) || (row === 'front' ? 'OH' : 'DS');
+  if (primary !== 'S') return primary;
+  if (system === '5-1') return 'S';
+  if (system === '4-2') return row === 'front' ? 'S' : 'DS';
+  if (system === '6-2') return row === 'back' ? 'S' : 'OPP';
+  return 'S'; // simple: score her as what she is
+}
+
+/* scoreRotation: applies libero swap (per level rules) then sums per-player
    fits. Mode-specific accents added to back-row contributions. */
-function scoreRotation(rotation, mode, libero, ruleset, settings) {
+function scoreRotation(rotation, mode, libero, ruleset, settings, system) {
   let frontRow = rotation.frontRow.slice();
   let backRow = rotation.backRow.slice();
 
@@ -1249,13 +1298,11 @@ function scoreRotation(rotation, mode, libero, ruleset, settings) {
   let sum = 0;
   for (const p of frontRow) {
     if (!p) continue;
-    const role = (p.positions && p.positions[0]) || 'OH';
-    sum += playerFitForRole(p, role, settings);
+    sum += playerFitForRole(p, roleForScoring(p, 'front', system), settings);
   }
   for (const p of backRow) {
     if (!p) continue;
-    const role = (p.positions && p.positions[0]) || 'DS';
-    let s = playerFitForRole(p, role, settings);
+    let s = playerFitForRole(p, roleForScoring(p, 'back', system), settings);
     // Mode accents on back-row contribution.
     if (mode === 'sr') s += (p.skills.serveReceive || 0) * 0.5;
     else if (mode === 'serving') s += (p.skills.serving || 0) * 0.5;
@@ -1292,11 +1339,11 @@ function applySubPatterns(rotation, patterns, rotationIndex) {
 
 /* scoreLineup: top-level scoring used by the optimizer.
    Returns { score, perRotationScores }. */
-function scoreLineup(arrangement, mode, libero, patterns, ruleset, settings) {
+function scoreLineup(arrangement, mode, libero, patterns, ruleset, settings, system) {
   const rotations = arrangement.rotations || arrangement;
   const scores = rotations.map((rot, i) => {
     const effective = applySubPatterns(rot, patterns, i);
-    return scoreRotation(effective, mode, libero, ruleset, settings);
+    return scoreRotation(effective, mode, libero, ruleset, settings, system);
   });
   if (mode === 'best6') {
     return { score: scores[0], perRotationScores: scores };
@@ -1357,13 +1404,14 @@ function generateLineup(state) {
 
   const settings = state.settings || defaultSettings();
   const lineupCfg = state.lineup || defaultLineup();
-  const system = VALID_SYSTEMS.has(settings.system) ? settings.system : '5-1';
+  const system = VALID_SYSTEMS.has(settings.system) ? settings.system : '4-2';
   const mode = lineupCfg.optimizationMode || 'balanced';
   const ruleset = currentLevel(settings);
 
   const roster = state.players.filter(p => p.available && (p.name || '').trim());
-  if (roster.length < 7) {
-    return { error: `Need at least 7 available players (you have ${roster.length}).`, starters: null, validation: 'roster-size' };
+  const minRoster = system === 'simple' ? 6 : 7; // Simple 6 can run without a libero
+  if (roster.length < minRoster) {
+    return { error: `Need at least ${minRoster} available players (you have ${roster.length}).`, starters: null, validation: 'roster-size' };
   }
 
   // Derive forced starters from overrides: each unique pinned player must be
@@ -1379,7 +1427,9 @@ function generateLineup(state) {
   const forced = Array.from(forcedMap.values());
 
   const pairings = lineupCfg.pairings || [];
-  const { starters, validation: starterValidation } = chooseStarters(roster, system, mode, settings, forced, ruleset, pairings);
+  const { starters, validation: starterValidation } = system === 'simple'
+    ? chooseSimpleStarters(roster, settings, forced)
+    : chooseStarters(roster, system, mode, settings, forced, ruleset, pairings);
   if (!starters) {
     return { error: starterValidation, starters: null, validation: starterValidation };
   }
@@ -1406,7 +1456,7 @@ function generateLineup(state) {
 
   let best = null;
   for (const arr of pool) {
-    const { score, perRotationScores } = scoreLineup(arr, mode, libero, patterns, ruleset, settings);
+    const { score, perRotationScores } = scoreLineup(arr, mode, libero, patterns, ruleset, settings, system);
     if (!best || score > best.score) {
       best = { arrangement: arr, score, perRotationScores };
     }
@@ -1770,6 +1820,8 @@ if (typeof window !== 'undefined') {
   window.LEVELS = LEVELS;
   window.chooseStarters = chooseStarters;
   window.arrangeRotation = arrangeRotation;
+  window.roleForScoring = roleForScoring;
+  window.chooseSimpleStarters = chooseSimpleStarters;
   window.scoreRotation = scoreRotation;
   window.scoreLineup = scoreLineup;
   window.applySubPatterns = applySubPatterns;
@@ -2495,7 +2547,7 @@ function updateCounts() {
   $('#totalCount').textContent = total;
 
   const genBtn = $('#generateBtn');
-  if (genBtn) genBtn.disabled = avail < 7;
+  if (genBtn) genBtn.disabled = avail < (S.settings.system === 'simple' ? 6 : 7);
 }
 
 /* ===== Lineup Render ===== */
@@ -3486,7 +3538,7 @@ function init() {
       S.settings.level = LEVELS[e.target.value] ? e.target.value : 'ms';
       if (!currentLevel().systems.includes(S.settings.system)) {
         // Fall back to the first system this level offers that actually exists yet.
-        S.settings.system = currentLevel().systems.find(x => VALID_SYSTEMS.has(x)) || '5-1';
+        S.settings.system = currentLevel().systems.find(x => VALID_SYSTEMS.has(x)) || '4-2';
       }
       save();
       applyLevelGates();
@@ -3497,7 +3549,7 @@ function init() {
   if (systemSel) {
     systemSel.value = S.settings.system;
     systemSel.addEventListener('change', e => {
-      S.settings.system = VALID_SYSTEMS.has(e.target.value) ? e.target.value : '5-1';
+      S.settings.system = VALID_SYSTEMS.has(e.target.value) ? e.target.value : '4-2';
       const mirror = $('#systemSelectLineup');
       if (mirror) mirror.value = S.settings.system;
       save();
@@ -3540,7 +3592,7 @@ function init() {
   if (systemSelLineup) {
     systemSelLineup.value = S.settings.system;
     systemSelLineup.addEventListener('change', e => {
-      S.settings.system = VALID_SYSTEMS.has(e.target.value) ? e.target.value : '5-1';
+      S.settings.system = VALID_SYSTEMS.has(e.target.value) ? e.target.value : '4-2';
       if (systemSel) systemSel.value = S.settings.system;
       save();
       scheduleRegen();

@@ -42,6 +42,8 @@
       </label>
       <label class="settings-field"><span>System <button class="help-btn help-btn-topbar" data-help="systems" aria-label="Which system?" type="button">?</button></span>
         <select id="systemSelect">
+          <option value="4-2" data-system="4-2">4-2</option>
+          <option value="simple" data-system="simple">Simple 6</option>
           <option value="5-1" data-system="5-1">5-1</option>
           <option value="6-2" data-system="6-2">6-2</option>
         </select>
@@ -102,8 +104,10 @@
         <div class="lineup-controls">
           <label class="lc-field"><span>System</span>
             <select id="systemSelectLineup">
-              <option value="5-1" data-system="5-1">5-1</option>
-              <option value="6-2" data-system="6-2">6-2</option>
+              <option value="4-2" data-system="4-2">4-2 — setter sets from the front row</option>
+              <option value="simple" data-system="simple">Simple 6 — best six, normal rotation</option>
+              <option value="5-1" data-system="5-1">5-1 — one setter, all six rotations</option>
+              <option value="6-2" data-system="6-2">6-2 — setters set from the back row</option>
             </select>
           </label>
           <button class="btn btn-primary" id="generateBtn">⚡ Generate Lineup</button>
