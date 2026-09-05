@@ -1,83 +1,22 @@
-# Court IQ College — Volleyball Lineup Tool
+# Court IQ — Covenant
 
-A college-level volleyball lineup tool. **Forked from [Court IQ](https://github.com/demerson-code/court-iq)** (youth-rec edition) as a starting point — the user-facing scaffolding (roster UI, share link, drag-drop, animations, tab structure, theme) is reusable; the algorithm and domain model need significant rework for college play.
+A volleyball lineup and sub planner built for The Covenant School's middle school team, with a Level dial so the same tool grows into high school. Built for an iPad on the bench: pick a system (4-2, Simple 6, or 5-1), pin your starters, and let it plan how every girl gets on the floor when the score allows.
 
-**Live**: https://demerson-code.github.io/court-iq-college/
+**Live**: https://demerson-code.github.io/court-iq-covenant/
 
-## Status
+Forked from [Court IQ College](https://github.com/demerson-code/court-iq-college). One HTML file, one CSS file, one JS file — no build step, no dependencies, deploys from `main`.
 
-🚧 **Forked baseline — not yet college-ready.** This repo currently runs the youth-rec algorithm verbatim. Major rework is in progress to model real college volleyball.
-
-## What's already working (inherited from Court IQ)
-
-- Roster UI with collapsible cards and number-grid skill ratings
-- Auto-save to localStorage and URL-hash share links (with timestamp)
-- Native share via `navigator.share()` with clipboard fallback
-- Animated court with manual rotation cycling
-- Drag-and-drop swaps (court ↔ court, bench ↔ court, court ↔ bench)
-- Sort dropdowns on roster and bench (AVG / Name, asc/desc)
-- Help system ("?" icons) with definition popovers
-- Strict / Loose lineup mode toggle
-- Responsive across phone / tablet / desktop
-
-## What needs to change for college level
-
-### Rotation systems
-- **5-1**: one fixed setter, all 6 rotations
-- **6-2**: two setters from back row only
-- Tool should let coach pick the system per team
-
-### Specialized positions
-Players are tagged with primary position(s). Algorithm must respect them:
-- **OH1 / OH2** — outside hitters (left front)
-- **MB1 / MB2** — middle blockers
-- **S** — setter (in 5-1) or setters (in 6-2)
-- **OPP** — opposite hitter (right front)
-- **L** — libero (back row only)
-- **DS** — defensive specialist
-
-### Libero rules
-- Back-row only, doesn't count in normal rotation
-- Replaces a back-row player and swaps out when they rotate to front
-- May or may not serve depending on league
-
-### Substitution model
-- NCAA cap: 15 subs per set
-- Re-entry must be in the same rotation slot
-- Designated DS pairings (player A only swaps for player B)
-
-### Smarter skills
-Split / add:
-- Passing → **serve-receive** (with a serve coming at you) vs free-ball pass
-- **Blocking** (separate from defense)
-- **Hitting efficiency** (kills − errors / total attempts)
-- **Tempo** for setters (1-ball, slide, back set range)
-- **Off-hand hitting** ability
-
-### Algorithm rewrite
-The current "balance the 6-cycle to maximize min rotation" approach is wrong here. New model:
-- Position-locked assignment problem (Hungarian algorithm or constraint solver)
-- "Best setter at S, best libero at L, best OH at OH1, etc." with hard position constraints
-- Within-set substitution planning
-
-### Match-day features
-- Multiple situational lineups (vs strong server, vs big block, etc.)
-- Opponent scouting fields (their ace server, hitting tendencies)
-- Live sub tracking with cap enforcement
-
-## Stack
-
-- One HTML / one CSS / one JS file
-- Zero dependencies, zero build step
-- Deploys to GitHub Pages from `main` branch root
-
-## Local Development
+## Local development
 
 ```sh
-python3 -m http.server 8000
-# open http://localhost:8000
+python -m http.server 3470
+# open http://localhost:3470
+```
+
+```sh
+npm test   # Playwright algorithm tests
 ```
 
 ## Sharing
 
-URL hash encodes full team state. Single-coach edit model — whoever shares the latest link is source of truth. Timestamp in the URL helps coaches see which version is fresher.
+The share link (🔗 in the top bar) carries the whole team — roster, ratings, settings, lineup. Whoever shares the latest link is the source of truth. Theme, tonight's scrimmage attendance, and in-match bench state stay on the device and never travel with the link.

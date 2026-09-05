@@ -1,23 +1,52 @@
-/* ===== Court IQ — Volleyball Rotation Tool ===== */
+/* ===== Court IQ — Covenant · Volleyball Lineup Tool ===== */
 
+/* Theme tokens. Light is the default (bright gyms, iPad glare). The dark
+   set is applied twice — once for an explicit toggle, once for the device
+   preference when the user hasn't chosen — so both directions win. Keep the
+   two dark blocks identical. */
 :root {
-  --green: #009639;        /* deeper Marshall green — easier on the eye than 354 C neat */
-  --green-dark: #006E2A;
-  --green-light: #2DB055;
-  --green-soft: #DDEFE3;
-  --court-navy: #0F1A2E;   /* keep court contrast */
-  --court-deep: #060B17;
-  --court-line: #FFFFFF;
-  --bg: #0E1726;
-  --card: #15202E;
-  --text: #F5FAF7;
-  --text-mute: #9DB1A6;
-  --text-soft: #BCD3C5;
-  --border: #1F3346;
-  --border-soft: #182838;
-  --good: #2CC960; --warn: #F5B82E; --bad: #E04A4A;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.18); --shadow: 0 4px 14px rgba(0,0,0,.22); --shadow-lg: 0 10px 32px rgba(0,0,0,.32);
+  /* Brand — placeholders until Covenant colors arrive (Block 3 swaps these lines) */
+  --brand: #1F3A5F; --brand-dark: #14263F; --brand-light: #3D5F8F; --brand-soft: #E3EAF3;
+  --brand-rgb: 31, 58, 95;
+  /* Back-compat aliases — older rules still say --green* */
+  --green: var(--brand); --green-dark: var(--brand-dark); --green-light: var(--brand-light); --green-soft: var(--brand-soft);
+  --court-navy: #1E2A3A; --court-deep: #121A26; --court-line: #FFFFFF;
+  --bg: #F4F6F9; --card: #FFFFFF;
+  --text: #17202B; --text-mute: #5B6878; --text-soft: #3E4B5B;
+  --border: #D7DEE7; --border-soft: #E8EDF3;
+  --overlay: rgba(0,0,0,.06); --overlay-strong: rgba(0,0,0,.12);
+  --on-brand: #FFFFFF;
+  --good: #1E9E4F; --warn: #C98A00; --bad: #C93B3B;
+  --role-S: #6D28D9; --role-OPP: #B45309; --role-OH: #0369A1; --role-MB: #B91C1C; --role-L: var(--brand-dark); --role-DS: #475569;
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.06); --shadow: 0 4px 12px rgba(16,24,40,.08); --shadow-lg: 0 12px 32px rgba(16,24,40,.12);
   --radius: 14px; --radius-sm: 8px; --radius-lg: 22px; --tap: 44px;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --brand-light: #6F93C4; --brand-soft: #1C2B42;
+  --court-navy: #0F1A2E; --court-deep: #060B17;
+  --bg: #0E1726; --card: #15202E;
+  --text: #F5FAF7; --text-mute: #9DB1A6; --text-soft: #BCD3C5;
+  --border: #1F3346; --border-soft: #182838;
+  --overlay: rgba(255,255,255,.06); --overlay-strong: rgba(255,255,255,.12);
+  --good: #2CC960; --warn: #F5B82E; --bad: #E04A4A;
+  --role-S: #C4B5FD; --role-OPP: #FCD34D; --role-OH: #7DD3FC; --role-MB: #FCA5A5; --role-L: var(--brand-light); --role-DS: #CBD5E1;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.18); --shadow: 0 4px 14px rgba(0,0,0,.22); --shadow-lg: 0 10px 32px rgba(0,0,0,.32);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand-light: #6F93C4; --brand-soft: #1C2B42;
+    --court-navy: #0F1A2E; --court-deep: #060B17;
+    --bg: #0E1726; --card: #15202E;
+    --text: #F5FAF7; --text-mute: #9DB1A6; --text-soft: #BCD3C5;
+    --border: #1F3346; --border-soft: #182838;
+    --overlay: rgba(255,255,255,.06); --overlay-strong: rgba(255,255,255,.12);
+    --good: #2CC960; --warn: #F5B82E; --bad: #E04A4A;
+    --role-S: #C4B5FD; --role-OPP: #FCD34D; --role-OH: #7DD3FC; --role-MB: #FCA5A5; --role-L: var(--brand-light); --role-DS: #CBD5E1;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.18); --shadow: 0 4px 14px rgba(0,0,0,.22); --shadow-lg: 0 10px 32px rgba(0,0,0,.32);
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -200,10 +229,10 @@ p { margin: 0; }
 .tab.active {
   color: var(--green-light);
   border-bottom-color: var(--green);
-  background: rgba(0, 150, 57, 0.08);
+  background: rgba(var(--brand-rgb), 0.08);
 }
 .tab.active .tab-icon { opacity: 1; }
-.tab:hover { background: rgba(0, 150, 57, 0.10); }
+.tab:hover { background: rgba(var(--brand-rgb), 0.10); }
 
 /* ===== Tab panels ===== */
 main {
@@ -439,7 +468,7 @@ main {
   background: white;
   border-radius: 50%;
   transition: 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: var(--shadow-sm);
 }
 .avail-toggle input:checked + .avail-slider { background: var(--good); }
 .avail-toggle input:checked + .avail-slider::before { transform: translateX(18px); }
@@ -728,7 +757,7 @@ main {
   font-size: clamp(11px, 2.6vw, 15px);
   font-weight: 700;
   color: var(--text);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  box-shadow: var(--shadow);
   transition: top 0.45s cubic-bezier(0.4, 0.1, 0.2, 1.05), left 0.45s cubic-bezier(0.4, 0.1, 0.2, 1.05);
   pointer-events: auto;
   cursor: default;
@@ -1367,7 +1396,7 @@ body.dragging .player-circle { cursor: grabbing; }
   gap: 2px;
   font-weight: 700;
   color: var(--text);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+  box-shadow: var(--shadow-lg);
   transform: translate(-50%, -50%) scale(1);
   animation: ghostIn 0.15s ease-out;
   padding: 6px;
@@ -1418,7 +1447,7 @@ body.dragging .player-circle { cursor: grabbing; }
   font-weight: 700;
   color: var(--green-dark);
   background: rgba(255, 240, 245, 0.97);
-  box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+  box-shadow: var(--shadow);
   z-index: 90;
   pointer-events: auto;
 }
@@ -1529,7 +1558,7 @@ body.dragging-court .bench-drop-zone { display: block; }
 .roster-field-tempo {
   margin-top: 8px;
   padding: 8px 10px;
-  background: rgba(0, 150, 57, 0.08);
+  background: rgba(var(--brand-rgb), 0.08);
   border-radius: var(--radius-sm);
   border: 1px dashed var(--green);
 }
@@ -1597,7 +1626,7 @@ body.dragging-court .bench-drop-zone { display: block; }
   font-size: 12px;
   font-weight: 700;
   color: var(--green-light);
-  background: rgba(0, 150, 57, 0.12);
+  background: rgba(var(--brand-rgb), 0.12);
   padding: 2px 8px;
   border-radius: 999px;
 }
@@ -1609,7 +1638,7 @@ body.dragging-court .bench-drop-zone { display: block; }
   border: 2px dashed var(--border);
   border-radius: var(--radius-sm);
   padding: 8px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--overlay);
 }
 .rot-zone {
   background: var(--bg);
@@ -1641,7 +1670,7 @@ body.dragging-court .bench-drop-zone { display: block; }
 }
 .rot-zone-libero {
   border-color: var(--green);
-  background: rgba(0, 150, 57, 0.06);
+  background: rgba(var(--brand-rgb), 0.06);
 }
 .rot-zone-override {
   outline: 2px solid var(--warn);
@@ -1687,7 +1716,7 @@ body.dragging-court .bench-drop-zone { display: block; }
 .rot-chip-L  { border-left: 3px solid var(--green); }
 .rot-chip-DS { border-left: 3px solid #94A3B8; }
 .rot-zone.drop-target-active {
-  background: rgba(0, 150, 57, 0.18);
+  background: rgba(var(--brand-rgb), 0.18);
   border-color: var(--green);
 }
 
@@ -1751,7 +1780,7 @@ body.dragging-court .bench-drop-zone { display: block; }
   cursor: pointer;
 }
 .lb-replaces-chip:has(input:checked) {
-  background: rgba(0, 150, 57, 0.18);
+  background: rgba(var(--brand-rgb), 0.18);
   border-color: var(--green);
   color: var(--green-light);
 }
@@ -1901,7 +1930,7 @@ body.dragging-court .bench-drop-zone { display: block; }
   font-size: 16px;
   font-weight: 800;
   color: var(--green-light);
-  background: rgba(0, 150, 57, 0.12);
+  background: rgba(var(--brand-rgb), 0.12);
   padding: 4px 10px;
   border-radius: 999px;
 }
@@ -1930,11 +1959,11 @@ body.dragging-court .bench-drop-zone { display: block; }
 }
 .team-player:active { cursor: grabbing; }
 .team-player.drop-target-active {
-  background: rgba(0, 150, 57, 0.15);
+  background: rgba(var(--brand-rgb), 0.15);
   border-color: var(--green);
 }
 .team-card.drop-target-active {
-  background: rgba(0, 150, 57, 0.06);
+  background: rgba(var(--brand-rgb), 0.06);
   border-color: var(--green);
 }
 .team-player-name {
@@ -1956,12 +1985,12 @@ body.dragging-court .bench-drop-zone { display: block; }
 .team-player-L    { border-left-color: var(--green); }
 .team-player-DS   { border-left-color: #94A3B8; }
 
-.bench-role-tag-S    { background: rgba(139, 92, 246, 0.20); color: #C4B5FD; }
-.bench-role-tag-OPP  { background: rgba(245, 158, 11, 0.20); color: #FCD34D; }
-.bench-role-tag-OH   { background: rgba(56, 189, 248, 0.20); color: #7DD3FC; }
-.bench-role-tag-MB   { background: rgba(239, 68, 68, 0.20);  color: #FCA5A5; }
-.bench-role-tag-L    { background: rgba(0, 150, 57, 0.20);   color: var(--green-light); }
-.bench-role-tag-DS   { background: rgba(148, 163, 184, 0.20); color: #CBD5E1; }
+.bench-role-tag-S    { background: rgba(139, 92, 246, 0.20); color: var(--role-S); }
+.bench-role-tag-OPP  { background: rgba(245, 158, 11, 0.20); color: var(--role-OPP); }
+.bench-role-tag-OH   { background: rgba(56, 189, 248, 0.20); color: var(--role-OH); }
+.bench-role-tag-MB   { background: rgba(239, 68, 68, 0.20);  color: var(--role-MB); }
+.bench-role-tag-L    { background: rgba(var(--brand-rgb), 0.20);   color: var(--green-light); }
+.bench-role-tag-DS   { background: rgba(148, 163, 184, 0.20); color: var(--role-DS); }
 
 /* Substitute row: greyed-out background, smaller label, separator above */
 .team-player.is-sub {

@@ -1,6 +1,6 @@
 # Court IQ — Covenant · v1 Implementation Plan
 
-**Plan dated**: 2026-09-05 · **Status**: ready to execute · **Source repo**: `court-iq-college` (fork point `b66e0d5`)
+**Plan dated**: 2026-09-05 · **Status**: Block 0 built locally (repo not yet on GitHub — 0.1's `gh repo create` awaits approval) · **Source repo**: `court-iq-college` (fork point `b66e0d5`)
 **Target repo**: `court-iq-covenant` (new) · **Live (once created)**: https://demerson-code.github.io/court-iq-covenant/ · **Preview**: port 3470
 
 Untracked by intent — this file owns per-block scope. `CLAUDE.md` in the new repo will point here.
@@ -68,7 +68,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
 
 ### Tasks
 
-- [ ] **0.1 — Create the repo.** ⚠️ *Ask Derek before running the `gh repo create` line — it's outward-facing.*
+- [x] **0.1 — Create the repo.** ⚠️ *Ask Derek before running the `gh repo create` line — it's outward-facing.*
   ```bash
   cd C:/Users/demerson/Documents
   mkdir court-iq-covenant && cd court-iq-covenant
@@ -82,7 +82,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   Then in GitHub → Settings → Pages → Deploy from `main` / root. No workflow file.
 
-- [ ] **0.2 — Rename storage, team, title.** `app.js:98-102`:
+- [x] **0.2 — Rename storage, team, title.** `app.js:98-102`:
   ```js
   const STORAGE_KEY = 'court_iq_covenant_v1';
   const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -100,7 +100,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   `package.json` preview → `python -m http.server 3470`; `playwright.config.js` baseURL/port → 3470.
   Rewrite `CLAUDE.md` (live URL, port, "Level dial" section replacing "Skill set", the two-rules block stays verbatim) and `README.md` (one paragraph: what it is, who it's for, live link).
 
-- [ ] **0.3 — Replace `RULESETS` with `LEVELS`.** `app.js:55-64`:
+- [x] **0.3 — Replace `RULESETS` with `LEVELS`.** `app.js:55-64`:
   ```js
   // One dial, four effects: which positions the coach sees, which systems
   // the picker offers, which controls are visible, and the rule preset.
@@ -125,7 +125,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
       liberoMayServe: true,
       reentry: 'sameSlot',
       timeoutsPerSet: 2,
-      roleStrict: false,
+      roleStrict: true,        // deviation from first draft: the existing 5-1/6-2 error-path tests assert strict-role validation, and HS coaches assign positions
       blockingScale: 1,
       leadThreshold: 5,
       roles: ['S', 'OH', 'MB', 'OPP', 'L', 'DS'],
@@ -184,7 +184,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   </label>
   ```
 
-- [ ] **0.4 — `applyLevelGates()`.** One function, called from `init()` after `renderRoster()` and from the level-change handler. Anything HS-only in the HTML carries `data-hs-only`; anything that is a *system option* carries `data-system`.
+- [x] **0.4 — `applyLevelGates()`.** One function, called from `init()` after `renderRoster()` and from the level-change handler. Anything HS-only in the HTML carries `data-hs-only`; anything that is a *system option* carries `data-system`.
   ```js
   /* Level gating: HS-only controls are marked data-hs-only in the HTML.
      System <option>s are marked data-system and hidden when the current
@@ -204,7 +204,7 @@ Fork in place, keep the three-file structure and the no-build-step deploy. Every
   ```
   Mark in `index.html`: the setter-tempo toggle label → `data-hs-only`; `<option value="6-2" data-system="6-2">` on both system selects (all four options get `data-system`).
 
-- [ ] **0.5 — Light theme + dark toggle.** `styles.css:3-22` becomes two token sets. Light is the default on bare `:root`; dark under both the explicit attribute and the system preference:
+- [x] **0.5 — Light theme + dark toggle.** `styles.css:3-22` becomes two token sets. Light is the default on bare `:root`; dark under both the explicit attribute and the system preference:
   ```css
   :root {
     /* Brand — placeholders until Covenant colors arrive (Block 3 swaps these 4 lines) */

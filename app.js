@@ -52,14 +52,47 @@ const SKILL_LABELS_SHORT = {
 };
 const SETTER_TEMPO_KEY = 'setterTempo'; // toggleable 7th skill, S-only
 
-const RULESETS = {
-  rec:  { label: 'Rec League',     subsPerSet: 12, liberoMayServe: false, reentry: 'sameSlot', timeoutsPerSet: 2, roleStrict: false },
-  ncaa: { label: "NCAA Women's",   subsPerSet: 15, liberoMayServe: true,  reentry: 'sameSlot', timeoutsPerSet: 2, roleStrict: true  }
+// One dial, four effects: which positions the coach sees, which systems
+// the picker offers, which controls are visible, and the rule preset.
+// Every value here is a DEFAULT — the coach can override subsPerSet,
+// leadThreshold and liberoMayServe under Advanced (settings.levelOverrides).
+const LEVELS = {
+  ms: {
+    label: 'Middle School',
+    subsPerSet: 18,          // NFHS default; Covenant's league TBD — coach confirms
+    liberoMayServe: true,    // confirmed 2026-09-04
+    reentry: 'sameSlot',
+    timeoutsPerSet: 2,
+    roleStrict: false,       // never reject a roster for lacking a role
+    blockingScale: 0.35,     // blocking rarely decides MS points; tall girls still get credit
+    leadThreshold: 5,        // "winning enough" to start subbing — coach adjusts
+    roles: ['S', 'OH', 'MB', 'L'],
+    systems: ['4-2', 'simple', '5-1']
+  },
+  hs: {
+    label: 'High School',
+    subsPerSet: 18,
+    liberoMayServe: true,
+    reentry: 'sameSlot',
+    timeoutsPerSet: 2,
+    roleStrict: true,        // HS coaches assign positions; validation messages are useful here
+    blockingScale: 1,
+    leadThreshold: 5,
+    roles: ['S', 'OH', 'MB', 'OPP', 'L', 'DS'],
+    systems: ['4-2', 'simple', '5-1', '6-2']
+  }
 };
-// roleStrict: when false (Rec), any player can fill any role/zone — the
+// roleStrict: when false (MS), any player can fill any role/zone — the
 // optimizer still scores per-role fit, but won't reject a roster that
 // lacks a designated setter or libero, and won't reject pins that violate
-// role caps. NCAA enforces strict 5-1 / 6-2 role composition.
+// role caps.
+function currentLevel(settings) {
+  const s = settings || (typeof S !== 'undefined' ? S.settings : null) || {};
+  const base = LEVELS[s.level] || LEVELS.ms;
+  // Coach overrides (Advanced panel) layer over the level defaults.
+  return { ...base, ...(s.levelOverrides || {}) };
+}
+function isHS(settings) { return ((settings || S.settings || {}).level) === 'hs'; }
 
 // Per-role skill weights (higher = more important for that role).
 // Used by Block 2's algorithm; declared here so the data model and
@@ -95,14 +128,21 @@ const safeStorage = (() => {
   };
 })();
 
-const STORAGE_KEY = 'court_iq_college_v1';
-const LEGACY_KEY = 'court_iq_v1'; // youth-rec collision; one-time migrate
+const STORAGE_KEY = 'court_iq_covenant_v1';
+const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
+const THEME_KEY = 'court_iq_covenant_theme'; // 'light' | 'dark' | null (= follow device)
 
 /* ===== State ===== */
-const DEFAULT_TEAM_NAME = 'Marshall Thundering Herd';
+const DEFAULT_TEAM_NAME = 'Covenant Middle School';
 
 function defaultSettings() {
-  return { ruleset: 'rec', system: '5-1', showJersey: false, showSetterTempo: false };
+  return {
+    level: 'ms',
+    levelOverrides: {},          // { subsPerSet?, leadThreshold?, liberoMayServe? }
+    system: '5-1',               // Block 2 flips the default to '4-2' once it exists
+    showJersey: true,
+    showSetterTempo: false
+  };
 }
 
 function defaultWeights() {
@@ -162,6 +202,7 @@ let S = {
 };
 
 const VALID_TABS = new Set(['roster', 'weights', 'lineup', 'scrimmage']);
+const VALID_SYSTEMS = new Set(['5-1', '6-2']); // Block 2 adds '4-2' and 'simple'
 
 const SORT_MODES = new Set(['avg-desc', 'avg-asc', 'name-asc', 'name-desc']);
 
@@ -348,7 +389,7 @@ function load() {
   }
   try {
     let raw = safeStorage.get(STORAGE_KEY);
-    if (!raw) {
+    if (!raw && LEGACY_KEY) {
       const legacy = safeStorage.get(LEGACY_KEY);
       // Silent migration: copy youth-rec record into the college-scoped key.
       // Don't delete the legacy key — youth tool still owns it.
@@ -391,11 +432,14 @@ function applyLoadedState(data) {
     S.weights = w;
   }
   if (data.settings && typeof data.settings === 'object') {
+    const { ruleset: _legacyRuleset, ...incoming } = data.settings;
     S.settings = {
       ...defaultSettings(),
-      ...data.settings,
-      ruleset: RULESETS[data.settings.ruleset] ? data.settings.ruleset : 'rec',
-      system: (data.settings.system === '6-2' ? '6-2' : '5-1')
+      ...incoming,
+      level: LEVELS[data.settings.level] ? data.settings.level : 'ms',
+      levelOverrides: (data.settings.levelOverrides && typeof data.settings.levelOverrides === 'object')
+        ? data.settings.levelOverrides : {},
+      system: VALID_SYSTEMS.has(data.settings.system) ? data.settings.system : '5-1'
     };
   }
   if (data.lineup && typeof data.lineup === 'object') {
@@ -1248,9 +1292,9 @@ function generateLineup(state) {
 
   const settings = state.settings || defaultSettings();
   const lineupCfg = state.lineup || defaultLineup();
-  const system = settings.system === '6-2' ? '6-2' : '5-1';
+  const system = VALID_SYSTEMS.has(settings.system) ? settings.system : '5-1';
   const mode = lineupCfg.optimizationMode || 'balanced';
-  const ruleset = RULESETS[settings.ruleset] || RULESETS.rec;
+  const ruleset = currentLevel(settings);
 
   const roster = state.players.filter(p => p.available && (p.name || '').trim());
   if (roster.length < 7) {
@@ -1656,6 +1700,9 @@ function pickScrimmageTeams(state, opts) {
 // Tests inject roster/settings via window.S then call window.generateLineup(window.S).
 if (typeof window !== 'undefined') {
   window.generateLineup = generateLineup;
+  window.applyLevelGates = applyLevelGates;
+  window.currentLevel = currentLevel;
+  window.LEVELS = LEVELS;
   window.chooseStarters = chooseStarters;
   window.arrangeRotation = arrangeRotation;
   window.scoreRotation = scoreRotation;
@@ -2412,7 +2459,7 @@ function renderRotationGrid() {
   if (!r || !r.arrangement) return;
 
   const settings = S.settings || defaultSettings();
-  const ruleset = RULESETS[settings.ruleset] || RULESETS.rec;
+  const ruleset = currentLevel(settings);
   const patterns = S.lineup.subPatterns || [];
 
   r.arrangement.rotations.forEach((rot, idx) => {
@@ -2512,7 +2559,7 @@ function renderLiberoPanel() {
   body.replaceChildren();
   const cfg = S.lineup.liberoConfig;
   const settings = S.settings || defaultSettings();
-  const ruleset = RULESETS[settings.ruleset] || RULESETS.rec;
+  const ruleset = currentLevel(settings);
 
   // Player picker — anyone with L in their valid roles (Rec accepts anyone)
   const liberos = S.players.filter(p => validRolesForPlayer(p, ruleset).includes('L'));
@@ -2589,7 +2636,7 @@ function renderSubPatternsPanel() {
   if (!body) return;
   body.replaceChildren();
   const settings = S.settings || defaultSettings();
-  const ruleset = RULESETS[settings.ruleset] || RULESETS.rec;
+  const ruleset = currentLevel(settings);
   const patterns = S.lineup.subPatterns;
 
   // Subs counter
@@ -3164,6 +3211,44 @@ function applyTeamSwap(srcTeamIdx, targetTeamIdx, playerId, targetPlayerId) {
   renderTeamGrid();
 }
 
+/* ===== Level gating =====
+   HS-only controls are marked data-hs-only in the HTML. System <option>s are
+   marked data-system and hidden when the current level doesn't offer that
+   system. Called on init and on level change. */
+function applyLevelGates() {
+  const hs = isHS();
+  const lvl = currentLevel();
+  $$('[data-hs-only]').forEach(n => { n.hidden = !hs; });
+  $$('option[data-system]').forEach(o => {
+    o.hidden = !lvl.systems.includes(o.dataset.system);
+    o.disabled = o.hidden;
+  });
+  $$('#systemSelect, #systemSelectLineup').forEach(sel => { sel.value = S.settings.system; });
+  document.body.dataset.level = S.settings.level;
+}
+
+/* ===== Theme =====
+   A per-device preference (never in the share link). null = follow the
+   device. Stored under its own key so it survives a team reset. */
+function applyTheme(pref) {
+  const root = document.documentElement;
+  if (pref === 'dark' || pref === 'light') root.dataset.theme = pref; else delete root.dataset.theme;
+  const dark = pref === 'dark' || (!pref && matchMedia('(prefers-color-scheme: dark)').matches);
+  const btn = $('#themeToggle'); if (btn) btn.textContent = dark ? '☀️' : '🌙';
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = getComputedStyle(root).getPropertyValue('--brand').trim();
+}
+function initTheme() {
+  applyTheme(safeStorage.get(THEME_KEY));
+  $('#themeToggle')?.addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme
+      || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    safeStorage.set(THEME_KEY, next);
+    applyTheme(next);
+  });
+}
+
 /* ===== Tabs / Toast / Modal ===== */
 function setTab(name) {
   if (!VALID_TABS.has(name)) name = 'roster';
@@ -3218,6 +3303,7 @@ async function confirmDelete(player) {
 
 /* ===== Init / wiring ===== */
 function init() {
+  initTheme();
   const loadResult = load();
 
   // Editable team name in the topbar brand. The "Court IQ — " prefix is
@@ -3278,22 +3364,28 @@ function init() {
   $('#printLineupBtn')?.addEventListener('click', printLineup);
 
   // Topbar settings: ruleset / system / jersey toggle / setter-tempo toggle
-  const rulesetSel = $('#rulesetSelect');
+  const levelSel = $('#levelSelect');
   const systemSel = $('#systemSelect');
   const jerseyTog = $('#jerseyToggle');
   const tempoTog = $('#setterTempoToggle');
-  if (rulesetSel) {
-    rulesetSel.value = S.settings.ruleset;
-    rulesetSel.addEventListener('change', e => {
-      S.settings.ruleset = RULESETS[e.target.value] ? e.target.value : 'rec';
+  if (levelSel) {
+    levelSel.value = S.settings.level;
+    levelSel.addEventListener('change', e => {
+      S.settings.level = LEVELS[e.target.value] ? e.target.value : 'ms';
+      if (!currentLevel().systems.includes(S.settings.system)) {
+        // Fall back to the first system this level offers that actually exists yet.
+        S.settings.system = currentLevel().systems.find(x => VALID_SYSTEMS.has(x)) || '5-1';
+      }
       save();
+      applyLevelGates();
+      renderRoster();
       scheduleRegen();
     });
   }
   if (systemSel) {
     systemSel.value = S.settings.system;
     systemSel.addEventListener('change', e => {
-      S.settings.system = e.target.value === '6-2' ? '6-2' : '5-1';
+      S.settings.system = VALID_SYSTEMS.has(e.target.value) ? e.target.value : '5-1';
       const mirror = $('#systemSelectLineup');
       if (mirror) mirror.value = S.settings.system;
       save();
@@ -3332,7 +3424,7 @@ function init() {
   if (systemSelLineup) {
     systemSelLineup.value = S.settings.system;
     systemSelLineup.addEventListener('change', e => {
-      S.settings.system = e.target.value === '6-2' ? '6-2' : '5-1';
+      S.settings.system = VALID_SYSTEMS.has(e.target.value) ? e.target.value : '5-1';
       if (systemSel) systemSel.value = S.settings.system;
       save();
       scheduleRegen();
@@ -3445,6 +3537,7 @@ function init() {
 
   renderRoster();
   renderWeights();
+  applyLevelGates();
   updateCounts();
   updateLastEditedDisplay();
   // Restore the last-active tab (persisted in S.currentTab); falls back to

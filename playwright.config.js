@@ -9,12 +9,12 @@ module.exports = {
   fullyParallel: true,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: 'http://localhost:3460',
+    baseURL: 'http://localhost:3470',
     trace: 'retain-on-failure'
   },
   webServer: {
-    command: 'python -m http.server 3460',
-    port: 3460,
+    command: 'python -m http.server 3470',
+    port: 3470,
     reuseExistingServer: true,
     stdout: 'ignore',
     stderr: 'pipe'

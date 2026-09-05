@@ -26,19 +26,19 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-function runGenerate(page, { roster, system, mode = 'balanced', ruleset = 'rec' }) {
-  return page.evaluate(({ roster, system, mode, ruleset }) => {
+function runGenerate(page, { roster, system, mode = 'balanced', level = 'hs' }) {
+  return page.evaluate(({ roster, system, mode, level }) => {
     window.S.players = roster;
     window.S.settings.system = system;
-    window.S.settings.ruleset = ruleset;
+    window.S.settings.level = level;
     window.S.lineup.optimizationMode = mode;
     return window.generateLineup(window.S);
-  }, { roster, system, mode, ruleset });
+  }, { roster, system, mode, level });
 }
 
 test.describe('5-1 system', () => {
   test('balanced lineup has 1 S, 1 OPP, 2 OH, 2 MB, libero set', async ({ page }) => {
-    const result = await runGenerate(page, { roster: balanced13, system: '5-1', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: balanced13, system: '5-1', level: 'hs' });
     expect(result.error).toBeFalsy();
     expect(result.starters).toBeTruthy();
     expect(result.starters.S).toHaveLength(1);
@@ -51,7 +51,7 @@ test.describe('5-1 system', () => {
   });
 
   test('produces 6 distinct rotation arrangements', async ({ page }) => {
-    const result = await runGenerate(page, { roster: balanced13, system: '5-1', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: balanced13, system: '5-1', level: 'hs' });
     expect(result.arrangement.rotations).toHaveLength(6);
     expect(result.perRotationScores).toHaveLength(6);
     // Every rotation has 6 players on the floor (front row + back row).
@@ -62,7 +62,7 @@ test.describe('5-1 system', () => {
   });
 
   test('every starter is in their primary or secondary role', async ({ page }) => {
-    const result = await runGenerate(page, { roster: balanced13, system: '5-1', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: balanced13, system: '5-1', level: 'hs' });
     const checkRole = (player, role) => {
       const valid = [player.positions[0], player.positions[1]].filter(Boolean);
       expect(valid).toContain(role);
@@ -77,7 +77,7 @@ test.describe('5-1 system', () => {
 
 test.describe('6-2 system', () => {
   test('balanced lineup uses 2 S, 0 OPP, 2 OH, 2 MB', async ({ page }) => {
-    const result = await runGenerate(page, { roster: balanced13, system: '6-2', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: balanced13, system: '6-2', level: 'hs' });
     expect(result.error).toBeFalsy();
     expect(result.starters).toBeTruthy();
     expect(result.starters.S).toHaveLength(2);
@@ -88,14 +88,14 @@ test.describe('6-2 system', () => {
   });
 
   test('the two setters are different players', async ({ page }) => {
-    const result = await runGenerate(page, { roster: balanced13, system: '6-2', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: balanced13, system: '6-2', level: 'hs' });
     expect(result.starters.S[0].id).not.toBe(result.starters.S[1].id);
   });
 });
 
 test.describe('error paths', () => {
   test('5-1 with no setters returns a setter-related error', async ({ page }) => {
-    const result = await runGenerate(page, { roster: noSetter, system: '5-1', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: noSetter, system: '5-1', level: 'hs' });
     expect(result.starters).toBeNull();
     expect(result.validation || result.error).toMatch(/setter/i);
   });
@@ -103,14 +103,14 @@ test.describe('error paths', () => {
   test('6-2 with only one setter returns an error mentioning 2 setters', async ({ page }) => {
     // balanced13 has 2 setters; remove one to leave a single S.
     const oneSetter = balanced13.filter(p => p.id !== 'p11');
-    const result = await runGenerate(page, { roster: oneSetter, system: '6-2', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: oneSetter, system: '6-2', level: 'hs' });
     expect(result.starters).toBeNull();
     expect(result.validation || result.error).toMatch(/setter/i);
   });
 
   test('roster smaller than 7 players returns roster-size error', async ({ page }) => {
     const six = balanced13.slice(0, 6);
-    const result = await runGenerate(page, { roster: six, system: '5-1', ruleset: 'ncaa' });
+    const result = await runGenerate(page, { roster: six, system: '5-1', level: 'hs' });
     expect(result.starters).toBeNull();
     expect(result.error).toMatch(/7/);
   });
@@ -121,8 +121,8 @@ test.describe('optimization modes', () => {
     // Maximin sanity check: balanced optimizes the worst rotation, best6
     // optimizes only rotation 1. So balanced's minimum-rotation score
     // should be at least as high as best6's minimum.
-    const balancedResult = await runGenerate(page, { roster: balanced13, system: '5-1', ruleset: 'ncaa', mode: 'balanced' });
-    const best6Result = await runGenerate(page, { roster: balanced13, system: '5-1', ruleset: 'ncaa', mode: 'best6' });
+    const balancedResult = await runGenerate(page, { roster: balanced13, system: '5-1', level: 'hs', mode: 'balanced' });
+    const best6Result = await runGenerate(page, { roster: balanced13, system: '5-1', level: 'hs', mode: 'best6' });
     const balancedWorst = Math.min(...balancedResult.perRotationScores);
     const best6Worst = Math.min(...best6Result.perRotationScores);
     expect(balancedWorst).toBeGreaterThanOrEqual(best6Worst - 0.001); // float tolerance
@@ -130,7 +130,7 @@ test.describe('optimization modes', () => {
 
   test('all four optimization modes return valid lineups', async ({ page }) => {
     for (const mode of ['balanced', 'best6', 'sr', 'serving']) {
-      const result = await runGenerate(page, { roster: balanced13, system: '5-1', ruleset: 'ncaa', mode });
+      const result = await runGenerate(page, { roster: balanced13, system: '5-1', level: 'hs', mode });
       expect(result.error, `mode=${mode}`).toBeFalsy();
       expect(result.starters, `mode=${mode}`).toBeTruthy();
     }
