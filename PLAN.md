@@ -783,6 +783,15 @@ Bench order: `intangibleScore desc`, then `playerSkillRaw desc`. For each bench 
 
 ---
 
+## Round 2 — coach-side feedback (2026-09-05)
+
+Derek reviewed the preview and asked for four changes. All built and verified:
+
+- [x] **All-around position.** `'ANY'` is a primary-position value meaning "no position yet." First option in the picker, default for new players, never offered as a secondary. Not in `ROLES` — it's never a lineup slot. In strict (HS) mode an all-around is eligible for every role. Scoring now uses the role a starter was *given* in this lineup (`result.roleOf`), not her primary, so an all-around picked as setter scores as a setter; unassigned all-arounds score as a hitter up front / back-row player in back.
+- [x] **Dark-mode contrast.** Skill inputs, AVG badge, sort select and every other brand-colored text used `--green-dark` (dark navy) on a dark surface. New `--brand-text` token: navy in light, pale blue in dark.
+- [x] **Lineup tab rebuilt around one court.** One rotation at a time, big chips with full names, rotation dots + Rotate, a score card (rotation strength, Overall + six categories averaged over the six on the floor with weakest/strongest flagged, lineup Worst/Average/Best), bench beside it with drag-drop onto any zone → pin → regenerate → scores update. The six-card grid (with planned subs) moved under a collapsed "All six rotations"; the breakdown panel is gone (its content is the score card).
+- [x] **Bench tab hidden.** Off the nav by default; "Show Bench tab (live sub tracker)" under Advanced brings it back. Nothing deleted.
+
 ## Parallel Execution Map
 
 ```

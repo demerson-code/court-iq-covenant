@@ -121,27 +121,41 @@
         <div class="lineup-status" id="lineupStatus"></div>
 
         <div id="lineupResult" hidden>
-          <div id="rotationGrid" class="rotation-grid"></div>
+          <section class="court-view" id="courtView">
+            <div class="court-view-main">
+              <div class="court-view-head">
+                <button class="btn btn-secondary rot-nav" id="rotPrev" type="button" aria-label="Previous rotation">‹</button>
+                <div class="rot-dots" id="rotDots" role="tablist" aria-label="Rotation"></div>
+                <button class="btn btn-primary rot-nav" id="rotNext" type="button">Rotate ➜</button>
+              </div>
+              <div class="big-court" id="bigCourt"></div>
+              <p class="hint court-hint">Starters and libero for this rotation. Tap <strong>Rotate</strong> to walk through the set. Drag a bench player onto a spot to put her there; drag a player onto the bench to release her.</p>
+            </div>
+            <aside class="court-view-side">
+              <div class="score-card" id="scoreCard"></div>
+              <div class="bench-card lb-bench" id="benchCard">
+                <div class="bench-card-head">
+                  <h3>Bench</h3>
+                  <select class="sort-select" id="benchSort" aria-label="Sort bench">
+                    <option value="avg-desc">AVG: high → low</option>
+                    <option value="avg-asc">AVG: low → high</option>
+                    <option value="name-asc">Name: A → Z</option>
+                    <option value="name-desc">Name: Z → A</option>
+                  </select>
+                </div>
+                <ul class="bench-list" id="benchList"></ul>
+              </div>
+            </aside>
+          </section>
 
-          <details class="lb-panel" id="lineupBreakdownPanel" open>
-            <summary>Lineup breakdown</summary>
-            <div class="lb-panel-body" id="lineupBreakdown"></div>
+          <details class="lb-panel" id="allRotationsPanel">
+            <summary>All six rotations (with planned subs)</summary>
+            <div class="lb-panel-body">
+              <div id="rotationGrid" class="rotation-grid"></div>
+            </div>
           </details>
 
           <aside id="lineupSide">
-            <div class="bench-card lb-bench" id="benchCard">
-              <div class="bench-card-head">
-                <h3>Bench (drag onto a zone to pin)</h3>
-                <select class="sort-select" id="benchSort" aria-label="Sort bench">
-                  <option value="avg-desc">AVG: high → low</option>
-                  <option value="avg-asc">AVG: low → high</option>
-                  <option value="name-asc">Name: A → Z</option>
-                  <option value="name-desc">Name: Z → A</option>
-                </select>
-              </div>
-              <ul class="bench-list" id="benchList"></ul>
-            </div>
-
             <details class="lb-panel" id="liberoPanel">
               <summary>Libero</summary>
               <div class="lb-panel-body" id="liberoPanelBody"></div>
@@ -168,7 +182,7 @@
               <div class="lb-panel-body" id="pairingsBody"></div>
             </details>
 
-          <details class="lb-panel" id="advancedPanel">
+            <details class="lb-panel" id="advancedPanel">
               <summary>Advanced</summary>
               <div class="lb-panel-body adv-body">
                 <div class="adv-grid">
@@ -178,6 +192,7 @@
                 <div class="adv-toggles">
                   <label class="settings-toggle"><input type="checkbox" id="advLiberoServe"> Libero may serve</label>
                   <label class="settings-toggle"><input type="checkbox" id="jerseyToggle"> Show jersey #</label>
+                <label class="settings-toggle"><input type="checkbox" id="showBenchToggle"> Show Bench tab (live sub tracker)</label>
                   <label class="settings-toggle" data-hs-only><input type="checkbox" id="setterTempoToggle"> Setter tempo</label>
                 </div>
                 <div data-hs-only>

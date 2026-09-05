@@ -36,6 +36,11 @@ Two **intangibles**, `attitude` and `athleticism`, are rated separately and
 only ever act as tiebreakers and bench-order — they never outrank skill for a
 starting spot. See `TIEBREAK_WEIGHT`.
 
+**Positions**: `ROLES` are the lineup slots. A player's primary may also be
+`'ANY'` ("All-around — no position yet"), the default for new players. It is
+not a slot: the optimizer treats her as eligible everywhere and scores every
+starter by the role she was given (`result.roleOf`), not her primary.
+
 ## State and persistence rules
 
 - `S` is the global state. Mutate it then call `save()` — never bypass.
@@ -119,6 +124,16 @@ Beyond those:
 - Blocks 0–6 built and verified locally (26 Playwright tests). See `PLAN.md`.
 - Pending: GitHub repo + Pages (needs Derek's go-ahead), real Covenant
   logo/colors (placeholder navy + "C" mark in place), iPad device check.
+
+## Lineup tab
+
+The main view is ONE rotation (`renderCourtView`, `S.viewRot` in memory only):
+big court, rotation dots + Rotate, a score card, and the bench beside it.
+Drops on the big court's zones go through the same `findDropTarget` /
+`applyManualOverride` path as the grid. The six-card grid lives under the
+collapsed "All six rotations" panel. The Bench tab is hidden unless
+`settings.showBench` (Advanced) — the coaches run scenarios at home, not at
+the game.
 
 ## Bench / match state
 
