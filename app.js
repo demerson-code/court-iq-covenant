@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.05-15';
+const APP_VERSION = '2026.09.05-16';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -466,14 +466,21 @@ function load() {
   } catch (e) { /* ignore */ }
 
   const urlState = readStateFromUrl();
-  // Newest wins. The address bar is synced 400ms after each edit, so a reload
-  // right after a drag (or an old bookmarked link) must not roll the team
-  // back to what the link says.
+  // Newest wins — but only when the link is the SAME team as this device
+  // already has (a reload right after a drag, or an old bookmark of your own
+  // team). A link for a different team is an intentional act: it loads, and
+  // whatever was here is kept under a backup key rather than destroyed.
   if (urlState && localData && typeof localData.lastEdited === 'number'
       && localData.lastEdited > (typeof urlState.lastEdited === 'number' ? urlState.lastEdited : 0)) {
-    applyLoadedState(localData);
-    save({ silent: true }); // re-sync the address bar to the newer state
-    return { fromUrl: false, keptLocal: true };
+    const localIds = new Set((localData.players || []).map(p => p && p.id));
+    const linkIds = (urlState.players || []).map(p => p && p.id).filter(Boolean);
+    const overlap = linkIds.length ? linkIds.filter(id => localIds.has(id)).length / linkIds.length : 0;
+    if (overlap >= 0.5) {
+      applyLoadedState(localData);
+      save({ silent: true }); // re-sync the address bar to the newer state
+      return { fromUrl: false, keptLocal: true };
+    }
+    try { safeStorage.set(STORAGE_KEY + '_prev', JSON.stringify(localData)); } catch (_) {}
   }
   if (urlState) {
     applyLoadedState(urlState);
