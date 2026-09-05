@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
     window.S.lineup.overrides = [];
     window.S.lineup.subPatterns = [];
     window.S.lineup.pairings = [];
-    window.S.lineup.liberoConfig = { playerId: null, replaces: ['MB'], servesInRotation: null };
+    window.S.lineup.liberoConfig = { playerId: null, covers: [], replaces: ['MB'], servesInRotation: null };
     window.S.lineup.planExclude = {};
     window.S.lineup.board = null;
     window.S.lineup.setterFrontOnly = false;
@@ -569,5 +569,37 @@ test.describe('coach subs by drag', () => {
     expect(out.outs).not.toContain(out.starter);
     expect(out.ins).not.toContain(out.sub);
     expect(out.subsUsed).toBe(2 + out.outs.length * 2);
+  });
+});
+
+test.describe('libero covers players', () => {
+  test('dragging the libero onto a starter makes her cover that starter only', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster;
+      window.S.settings.system = '4-2';
+      window.S.settings.level = 'ms';
+      window.S.lineup.everybodyPlays = false;
+      window.runGenerate({ fresh: true });
+      const r0 = window.S.result;
+      const seeded = window.S.lineup.liberoConfig.covers.slice();
+      const outside = r0.arrangement.startOrder.find(p => p.positions[0] === 'OH');
+      // find a rotation + zone where that outside is on the floor
+      let zone = null, idx = null;
+      for (let i = 0; i < 6 && zone == null; i++) { const e = window.courtEffective(i); for (const z of [1,2,3,4,5,6]) { const p = window.playerAtZone(e, z); if (p && p.id === outside.id) { zone = z; idx = i; break; } } }
+      window.liberoCoverDrop(idx, zone);
+      const r1 = window.S.result;
+      const libId = r1.libero.player.id;
+      const where = [0,1,2,3,4,5].map(i => { const e = window.courtEffective(i); const ids = e.backRow.filter(Boolean).map(p => p.id); return ids.includes(libId); });
+      const outsideBack = [0,1,2,3,4,5].map(i => r1.arrangement.rotations[i].backRow.some(p => p && p.id === outside.id));
+      return { seededCount: seeded.length, covers: window.S.lineup.liberoConfig.covers, outside: outside.id, where, outsideBack, benchHasLibero: [...document.querySelectorAll('#benchList .bench-item-libero')].length };
+    }, ms12);
+    expect(out.seededCount).toBe(2);                          // both middles after Suggest
+    expect(out.covers).toEqual(out.seededCount ? [...out.covers] : []);
+    expect(out.covers).toContain(out.outside);
+    expect(out.covers).toHaveLength(3);
+    expect(out.benchHasLibero).toBe(1);
+    // wherever the outside is in the back row, the libero is on the floor (unless the serve rule holds her out)
+    const serveHeld = out.where.filter((w, i) => out.outsideBack[i] && !w).length;
+    expect(serveHeld).toBeLessThanOrEqual(1);
   });
 });

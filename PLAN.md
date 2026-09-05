@@ -845,6 +845,10 @@ There is no save step: the board is the starting six, rotations 2–6 are derive
 
 - [x] The starter the libero covers was invisible: her chip showed the libero, and she's deliberately not on the bench. The libero chip now reads "Libero · in for Lyla" on the court and in the grid, and the print cell says "L Emilia for Lyla".
 
+## Round 11 — the libero lives on the bench (2026-09-05)
+
+- [x] Derek: "include Libero as an option to drag in — there will always be 6 on the bench." The libero is now always the first bench card ("Libero · covers Lyla, Jesslyn"). Dragging her onto a starter toggles whether she comes in for that starter in the back row; coverage is **by player** (`liberoConfig.covers`), and the position checkboxes are only what she starts out covering after Suggest lineup (old saves with no `covers` still work by position). The Libero panel lists who she covers with ✕ chips.
+
 ## Parallel Execution Map
 
 ```

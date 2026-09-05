@@ -2545,3 +2545,13 @@ body.dragging-court .bench-drop-zone { display: block; }
 /* ===== Round 10: libero says who she's covering ===== */
 .rot-zone-libero .rot-chip-role { color: var(--brand-text); }
 @media print { .rl-for { font-size: 8pt; color: #444; } }
+
+/* ===== Round 11: the libero lives on the bench ===== */
+.bench-item-libero { border-left-color: var(--brand) !important; background: rgba(var(--brand-rgb), 0.05); }
+.bench-item-libero .bench-role { color: var(--brand-text); }
+.lb-cover-chip {
+  font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  background: var(--brand-soft); color: var(--brand-text); border: 1px solid transparent;
+  border-radius: 999px; padding: 6px 12px; min-height: 36px;
+}
+.lb-cover-chip:hover { border-color: var(--brand); }

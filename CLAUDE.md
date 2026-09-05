@@ -134,6 +134,14 @@ Beyond those:
 - Pending: GitHub repo + Pages (needs Derek's go-ahead), real Covenant
   logo/colors (placeholder navy + "C" mark in place), iPad device check.
 
+## Libero
+
+Coverage is by player: `liberoConfig.covers` (starter ids), set by dragging
+the libero from the bench onto starters (`liberoCoverDrop`). `replaces`
+(positions) is only the seed applied when Suggest lineup runs, and the
+fallback for saves with no `covers`. `liberoCoversPlayer()` is the single
+matcher; the libero is always listed first on the bench.
+
 ## Lineup tab
 
 **The board is the lineup.** `S.lineup.board = { startOrder: [6 ids], liberoId }`

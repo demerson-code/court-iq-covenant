@@ -184,7 +184,9 @@ function defaultWeights() {
 function defaultLineup() {
   // optimizationMode: 'balanced' | 'best6' | 'sr' | 'serving'
   // overrides:        { rotationIndex, zone, playerId } — coach-pinned slots
-  // liberoConfig:     { playerId|null, replaces:['MB'|'OPP'|...], servesInRotation: 0..5|null }
+  // liberoConfig:     { playerId|null, covers:[starterIds], replaces:['MB'|...], servesInRotation: 0..5|null }
+  //                   covers = the starters she comes in for (set by dragging her onto them);
+  //                   replaces = the positions she starts out covering when you tap Suggest lineup
   // subPatterns:      [{ id, out, in, trigger:{rotationIndex,event}, return?: {...}, auto? }]
   //                   auto:true = written by planEverybodyPlays; never persisted
   // pairings:         [{ a: playerId, b: playerId }] — both must be starters together
@@ -196,7 +198,7 @@ function defaultLineup() {
   return {
     optimizationMode: 'balanced',
     overrides: [],           // legacy pin system — always empty now
-    liberoConfig: { playerId: null, replaces: ['MB'], servesInRotation: null },
+    liberoConfig: { playerId: null, covers: [], replaces: ['MB'], servesInRotation: null },
     subPatterns: [],
     pairings: [],
     everybodyPlays: true,
@@ -541,7 +543,8 @@ function applyLoadedState(data) {
       optimizationMode: VALID_MODES.has(data.lineup.optimizationMode) ? data.lineup.optimizationMode : 'balanced',
       overrides: Array.isArray(data.lineup.overrides) ? data.lineup.overrides : [],
       liberoConfig: data.lineup.liberoConfig && typeof data.lineup.liberoConfig === 'object'
-        ? { ...defaultLineup().liberoConfig, ...data.lineup.liberoConfig }
+        ? { ...defaultLineup().liberoConfig, ...data.lineup.liberoConfig,
+            covers: Array.isArray(data.lineup.liberoConfig.covers) ? data.lineup.liberoConfig.covers.filter(x => typeof x === 'string') : [] }
         : defaultLineup().liberoConfig,
       subPatterns: Array.isArray(data.lineup.subPatterns)
         ? data.lineup.subPatterns.filter(p => p && !p.auto).map(p => ({ ...p, in: (p.in && p.in.id) ? (S.players.find(x => x.id === p.in.id) || null) : null }))
@@ -1623,7 +1626,9 @@ function resultFromBoard(state) {
   const cfg = state.lineup.liberoConfig || {};
   const libCandidate = (cfg.playerId && byId.get(cfg.playerId)) || (board.liberoId && byId.get(board.liberoId)) || null;
   const libero = (libCandidate && ok(libCandidate) && !six.includes(libCandidate))
-    ? { player: libCandidate, replaces: cfg.replaces || ['MB'], servesInRotation: cfg.servesInRotation == null ? null : cfg.servesInRotation }
+    ? { player: libCandidate, replaces: cfg.replaces || ['MB'],
+        covers: (Array.isArray(cfg.covers) ? cfg.covers : []).filter(id => six.some(p => p && p.id === id)),
+        servesInRotation: cfg.servesInRotation == null ? null : cfg.servesInRotation }
     : null;
   const arrangement = { startOrder: six, rotations: _rotationsFromStartOrder(six) };
   const starters = { OH: [], MB: [], S: [], OPP: [], L: libero ? [libero.player] : [], DS: [] };
@@ -1713,6 +1718,30 @@ function coachSubDrop(idx, zone, inId) {
   save();
   runGenerate();
   toast(`${inP.name} in for ${target.name} from rotation ${idx + 1}.`, 2600);
+  return true;
+}
+
+/* liberoCoverDrop: the libero dragged from the bench onto a spot. Toggles
+   whether she comes in for the starter there (when that starter is in the
+   back row). Works the same in every rotation — coverage isn't a sub. */
+function liberoCoverDrop(idx, zone) {
+  const r = S.result;
+  const lib = r && r.libero && r.libero.player;
+  if (!lib || !(zone >= 1 && zone <= 6)) return false;
+  const eff = courtEffective(idx);
+  const pre = applySubPatterns(r.arrangement.rotations[idx], coachPatterns(), idx);
+  let target = playerAtZone(eff, zone);
+  if (target && target.id === lib.id) target = playerAtZone(pre, zone); // she's already there: toggle off
+  if (!target) return false;
+  if (target._sub) { toast('She covers starters, not subs.', 2600); return false; }
+  const cfg = S.lineup.liberoConfig;
+  const covers = Array.isArray(cfg.covers) ? cfg.covers.slice() : [];
+  const at = covers.indexOf(target.id);
+  if (at >= 0) { covers.splice(at, 1); toast(`${lib.name} no longer covers ${target.name}.`, 2600); }
+  else { covers.push(target.id); toast(`${lib.name} covers ${target.name} in the back row.`, 2600); }
+  cfg.covers = covers;
+  save();
+  runGenerate();
   return true;
 }
 
@@ -1822,7 +1851,7 @@ function matchFloor(match, players, liberoReplaces, level) {
   const rots = _rotationsFromStartOrder(order);
   const lib = match.liberoId && byId.get(match.liberoId);
   const cfg = (S.lineup && S.lineup.liberoConfig) || {};
-  const libero = lib ? { player: lib, replaces: liberoReplaces || ['MB'], servesInRotation: cfg.servesInRotation } : null;
+  const libero = lib ? { player: lib, replaces: liberoReplaces || ['MB'], covers: Array.isArray(cfg.covers) ? cfg.covers : [], servesInRotation: cfg.servesInRotation } : null;
   if (libero) libero.serveRot = resolveLiberoServeRot(rots, libero, level);
   return effectiveRotationWithLibero(rots[match.rotationIndex], libero, level, match.rotationIndex);
 }
@@ -1876,6 +1905,7 @@ function generateLineup(state) {
   const libero = liberoPlayer ? {
     player: liberoPlayer,
     replaces: (lineupCfg.liberoConfig && lineupCfg.liberoConfig.replaces) || ['MB'],
+    covers: [], // the optimizer places by position; player coverage is set once there is a board
     servesInRotation: lineupCfg.liberoConfig ? lineupCfg.liberoConfig.servesInRotation : null
   } : null;
 
@@ -2266,6 +2296,8 @@ if (typeof window !== 'undefined') {
   window.planEverybodyPlays = planEverybodyPlays;
   window.resultFromBoard = resultFromBoard;
   window.coachSubDrop = coachSubDrop;
+  window.liberoCoverDrop = liberoCoverDrop;
+  window.liberoCoversPlayer = liberoCoversPlayer;
   window.coachSubOut = coachSubOut;
   window.courtEffective = courtEffective;
   window.playerAtZone = playerAtZone;
@@ -2689,6 +2721,8 @@ function performDrop(source, target) {
 
   // bench → zone
   if (source.kind === 'bench' && target.kind === 'zone') {
+    const libId = S.result.libero && S.result.libero.player ? S.result.libero.player.id : null;
+    if (libId && source.playerId === libId) { liberoCoverDrop(target.rotIdx, target.zone); return; }
     if (startingSix) { if (boardPutPlayer(target.rotIdx, target.zone, source.playerId)) toast('Swapped in.'); }
     else coachSubDrop(target.rotIdx, target.zone, source.playerId);
     return;
@@ -3268,12 +3302,21 @@ function renderRotationGrid() {
    swaps in. rotIdx (0-5) enables the NFHS one-serving-spot rule: if her swap
    lands on the serving spot in a rotation other than libero.serveRot, the
    player she'd replace serves instead and the libero sits that rotation. */
+/* liberoCoversPlayer: does the libero come in for this back-row player?
+   By player when the coach has dragged her onto starters (covers), else
+   by position (replaces) — which is also how old saves keep working. */
+function liberoCoversPlayer(libero, p) {
+  if (!p || p._sub) return false;
+  const covers = Array.isArray(libero.covers) ? libero.covers : [];
+  if (covers.length) return covers.includes(p.id);
+  return (libero.replaces || ['MB']).includes(p.positions && p.positions[0]);
+}
+
 function effectiveRotationWithLibero(rotation, libero, ruleset, rotIdx) {
   if (!libero || !libero.player) return rotation;
-  const replaces = libero.replaces || ['MB'];
   const backRow = rotation.backRow.slice();
   if (backRow.some(p => p && p.id === libero.player.id)) return rotation; // already applied
-  const idx = backRow.findIndex(p => p && !p._sub && replaces.includes(p.positions && p.positions[0]));
+  const idx = backRow.findIndex(p => liberoCoversPlayer(libero, p));
   if (idx < 0) return rotation;
   const isServerSlot = idx === 2;
   if (isServerSlot) {
@@ -3290,11 +3333,9 @@ function effectiveRotationWithLibero(rotation, libero, ruleset, rotIdx) {
    it's a candidate, otherwise the first one. null = she never serves. */
 function resolveLiberoServeRot(rotations, libero, ruleset) {
   if (!libero || !libero.player || !(ruleset && ruleset.liberoMayServe)) return null;
-  const replaces = libero.replaces || ['MB'];
   const candidates = [];
   rotations.forEach((rot, i) => {
-    const server = rot.backRow[2];
-    if (server && !server._sub && replaces.includes(server.positions && server.positions[0])) candidates.push(i);
+    if (liberoCoversPlayer(libero, rot.backRow[2])) candidates.push(i);
   });
   if (!candidates.length) return null;
   const wanted = libero.servesInRotation;
@@ -3393,8 +3434,24 @@ function renderLiberoPanel() {
   picker.value = cfg.playerId || '';
   body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'Libero' }), picker]));
 
-  // Comes in for — only this level's positions, in coach words. Roles the
-  // coach checked at another level stay checked (and visible) so nothing is lost.
+  // Who she covers right now (set by dragging her from the bench onto starters).
+  const r = S.result;
+  const coveredNow = (r && r.arrangement ? r.arrangement.startOrder : []).filter(pl => pl && liberoCoversPlayer(r.libero || { covers: cfg.covers, replaces: cfg.replaces, player: {} }, pl));
+  const coversWrap = el('div', { cls: 'lb-replaces-wrap' });
+  if (!coveredNow.length) coversWrap.appendChild(el('span', { cls: 'hint', text: 'Nobody yet — drag her from the bench onto a starter.' }));
+  coveredNow.forEach(pl => {
+    coversWrap.appendChild(el('button', {
+      cls: 'lb-cover-chip', attrs: { type: 'button' }, title: `Stop covering ${pl.name}`,
+      text: `${pl.name} ✕`,
+      on: { click: () => {
+        const covers = (Array.isArray(cfg.covers) && cfg.covers.length ? cfg.covers : coveredNow.map(x => x.id)).filter(id => id !== pl.id);
+        cfg.covers = covers; save(); runGenerate();
+      } }
+    }));
+  });
+  body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'Comes in for' }), coversWrap]));
+
+  // The position rule — what she starts out covering when you tap Suggest lineup.
   const choices = level.roles.filter(r => r !== 'L');
   (cfg.replaces || []).forEach(r => { if (r !== 'L' && !choices.includes(r)) choices.push(r); });
   const replacesWrap = el('div', { cls: 'lb-replaces-wrap' });
@@ -3410,7 +3467,7 @@ function renderLiberoPanel() {
     });
     replacesWrap.appendChild(el('label', { cls: 'lb-replaces-chip' }, [cb, roleLabel(role)]));
   });
-  body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'Comes in for' }), replacesWrap]));
+  body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'After Suggest lineup, start by covering' }), replacesWrap]));
 
   if (level.liberoMayServe) {
     // NFHS: one serving spot per set. Auto = the first rotation where her swap
@@ -3821,7 +3878,8 @@ function renderBench() {
   const idx = (((S.viewRot || 0) % 6) + 6) % 6;
   const onFloor = new Set((r.arrangement ? r.arrangement.startOrder : []).filter(Boolean).map(p => p.id));
   coachPatterns().filter(pt => _patternActiveAt(pt, idx)).forEach(pt => { onFloor.delete(pt.out); onFloor.add(pt.in.id); });
-  if (r.libero && r.libero.player) onFloor.add(r.libero.player.id);
+  const libP = r.libero && r.libero.player;
+  if (libP) onFloor.add(libP.id);
   const benchPlayers = S.players
     .filter(p => p.available && (p.name || '').trim() && !onFloor.has(p.id))
     .map(p => {
@@ -3829,7 +3887,26 @@ function renderBench() {
       return { player: p, value: playerFitForRole(p, role, S.settings || defaultSettings()), skill: playerSkillRaw(p) };
     });
 
-  if (benchPlayers.length === 0) {
+  // The libero is a bench player who comes and goes freely, so she's always
+  // listed here. Drag her onto a starter to have her cover that starter.
+  if (libP) {
+    const byId = new Map(S.players.map(p => [p.id, p]));
+    const covered = (r.arrangement ? r.arrangement.startOrder : []).filter(p => p && liberoCoversPlayer(r.libero, p)).map(p => p.name);
+    const li = el('li', {
+      cls: 'bench-item bench-item-libero rot-chip-L',
+      attrs: { title: 'Drag onto a starter — she comes in for her in the back row' },
+      on: { pointerdown: e => onDragStart({ kind: 'bench', playerId: libP.id }, e) }
+    }, [
+      el('span', { cls: 'bench-grip', text: '⋮⋮', attrs: { 'aria-hidden': 'true' } }),
+      el('span', { cls: 'bench-main' }, [
+        el('span', { cls: 'bench-name', text: libP.name || '?' }),
+        el('span', { cls: 'bench-role', text: covered.length ? `Libero · covers ${covered.join(', ')}` : 'Libero · drag onto a starter she should cover' })
+      ]),
+      el('span', { cls: 'bench-stat-pill', text: playerSkillRaw(libP).toFixed(1), title: 'Average of the six skills' })
+    ]);
+    ul.appendChild(li);
+  }
+  if (benchPlayers.length === 0 && !libP) {
     ul.appendChild(el('li', { cls: 'bench-empty', text: 'No bench — every available player is starting.' }));
     return;
   }
@@ -4794,6 +4871,11 @@ function runGenerate(opts = {}) {
       startOrder: suggested.arrangement.startOrder.map(p => p.id),
       liberoId: (suggested.libero && suggested.libero.player) ? suggested.libero.player.id : null
     };
+    // She starts out covering the positions ticked under Libero; drags refine it.
+    const rule = (S.lineup.liberoConfig && S.lineup.liberoConfig.replaces) || ['MB'];
+    S.lineup.liberoConfig.covers = suggested.arrangement.startOrder
+      .filter(p => p && rule.includes(p.positions && p.positions[0]))
+      .map(p => p.id);
     save();
   }
   const result = resultFromBoard(S);
