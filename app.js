@@ -201,6 +201,7 @@ function defaultLineup() {
     pairings: [],
     everybodyPlays: true,
     planExclude: {},
+    setterFrontOnly: false,  // 4-2 only: a passer subs in for each setter's back-row trip
     board: null
   };
 }
@@ -403,6 +404,7 @@ function save(opts = {}) {
       pairings: S.lineup.pairings,
       everybodyPlays: S.lineup.everybodyPlays !== false,
       planExclude: S.lineup.planExclude || {},
+      setterFrontOnly: !!S.lineup.setterFrontOnly,
       board: S.lineup.board || null
     },
     scrimmage: {
@@ -545,6 +547,7 @@ function applyLoadedState(data) {
       pairings: Array.isArray(data.lineup.pairings) ? data.lineup.pairings : [],
       everybodyPlays: data.lineup.everybodyPlays !== false,
       planExclude: (data.lineup.planExclude && typeof data.lineup.planExclude === 'object') ? data.lineup.planExclude : {},
+      setterFrontOnly: !!data.lineup.setterFrontOnly,
       board: (data.lineup.board && Array.isArray(data.lineup.board.startOrder) && data.lineup.board.startOrder.length === 6)
         ? { startOrder: data.lineup.board.startOrder.map(String), liberoId: typeof data.lineup.board.liberoId === 'string' ? data.lineup.board.liberoId : null }
         : null
@@ -787,7 +790,8 @@ const HELP = {
       { dl: [
         ['When she goes in', 'When the starter she replaces rotates back to serve. She serves, then plays two more rotations in the back row.'],
         ['When she comes out', 'Right before she\'d rotate up to the net — the starter comes back in for her.'],
-        ['Order', 'Highest Attitude first, then Speed, then skill.']
+        ['Order', 'Highest Attitude first, then Speed, then skill.'],
+        ['Setters front row only', 'In a 4-2, turn this on and a passer goes in for each setter when she rotates to the back row, and the setter comes back at the net. Each setter needs her own passer (re-entry is spot-locked), and it uses 4 subs per trip around.']
       ] },
       { callout: 'Each swap uses two of your subs (in and back out). The plan stops when the next swap would go over your sub limit — change the limit under Advanced.' }
     ]
@@ -1356,24 +1360,10 @@ function roleForScoring(player, row, system, roleOf) {
 
 /* scoreRotation: applies libero swap (per level rules) then sums per-player
    fits. Mode-specific accents added to back-row contributions. */
-function scoreRotation(rotation, mode, libero, ruleset, settings, system, roleOf) {
-  let frontRow = rotation.frontRow.slice();
-  let backRow = rotation.backRow.slice();
-
-  if (libero && libero.player) {
-    const replaces = libero.replaces || ['MB'];
-    const idx = backRow.findIndex(p => p && !p._sub && replaces.includes(p.positions && p.positions[0]));
-    if (idx >= 0) {
-      // idx 2 == zone 1 (server). If libero would land at server slot and ruleset
-      // disallows libero serving, skip the swap for that rotation (the original
-      // back-row replacement player serves).
-      const isServerSlot = idx === 2;
-      const liberoCanServeHere = ruleset && ruleset.liberoMayServe;
-      if (!(isServerSlot && !liberoCanServeHere)) {
-        backRow[idx] = libero.player;
-      }
-    }
-  }
+function scoreRotation(rotation, mode, libero, ruleset, settings, system, roleOf, rotIdx) {
+  const eff = effectiveRotationWithLibero(rotation, libero, ruleset, rotIdx);
+  const frontRow = eff.frontRow;
+  const backRow = eff.backRow;
 
   let sum = 0;
   for (const p of frontRow) {
@@ -1435,19 +1425,21 @@ function applySubPatterns(rotation, patterns, rotationIndex) {
    Returns { score, perRotationScores }. */
 function scoreLineup(arrangement, mode, libero, patterns, ruleset, settings, system, roleOf) {
   const rotations = arrangement.rotations || arrangement;
+  // The libero's one serving spot depends on the arrangement, so resolve it here.
+  const lib = libero ? { ...libero, serveRot: resolveLiberoServeRot(rotations, libero, ruleset) } : null;
   const scores = rotations.map((rot, i) => {
     const effective = applySubPatterns(rot, patterns, i);
-    return scoreRotation(effective, mode, libero, ruleset, settings, system, roleOf);
+    return scoreRotation(effective, mode, lib, ruleset, settings, system, roleOf, i);
   });
   if (mode === 'best6') {
-    return { score: scores[0], perRotationScores: scores };
+    return { score: scores[0], perRotationScores: scores, libero: lib };
   }
   // 'balanced', 'sr', 'serving' all use maximin with avg tiebreaker for now.
   // Block 5's match-day flow can refine sr/serving to score the 3 specific rotations
   // where the team is receiving / serving rather than all 6.
   const min = Math.min.apply(null, scores);
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-  return { score: min * 1000 + avg, perRotationScores: scores };
+  return { score: min * 1000 + avg, perRotationScores: scores, libero: lib };
 }
 
 /* SUB_PATTERN_TEMPLATES: seed templates for Block 3's sub-pattern editor. */
@@ -1542,11 +1534,37 @@ function planEverybodyPlays(state, result) {
   });
 
   const roleOf = result.roleOf || {};
-  const base = rotations.map(r => scoreRotation(effectiveRotationWithLibero(r, libero, level), mode, libero, level, settings, system, roleOf));
+  const base = rotations.map((r, i) => scoreRotation(r, mode, libero, level, settings, system, roleOf, i));
   const patterns = [];
   const used = new Set();
+  const planned = new Set();
   let subsUsed = 0;
+
+  // Setters play the front row only (4-2): a passer goes in for each setter
+  // when she rotates to the back row, before anyone else is planned. NFHS
+  // re-entry is spot-locked, so each setter needs her own passer.
+  const setterFirst = !!(state.lineup && state.lineup.setterFrontOnly) && system === '4-2';
+  if (setterFirst) {
+    const backRowFit = p => playerFitForRole(p, 'DS', settings) + tiebreak(p);
+    const setters = startOrder.map((p, i) => ({ p, i }))
+      .filter(({ p }) => p && !exclude[p.id] && ((roleOf[p.id] || (p.positions && p.positions[0])) === 'S'));
+    for (const { p: setter, i } of setters) {
+      if (subsUsed + 2 > cap) break;
+      const pick = bench.filter(b => !planned.has(b.id)).sort((a, b) => backRowFit(b) - backRowFit(a))[0];
+      if (!pick) break;
+      patterns.push({
+        id: 'auto_' + setter.id + '_' + pick.id,
+        out: setter.id, in: pick,
+        trigger: { rotationIndex: i, event: 'in' },
+        return:  { rotationIndex: (i + 3) % 6, event: 'in' },
+        auto: true, setterSub: true
+      });
+      used.add(setter.id); planned.add(pick.id); subsUsed += 2;
+    }
+  }
+
   for (const sub of bench) {
+    if (planned.has(sub.id)) continue;
     if (subsUsed + 2 > cap) break;
     let best = null;
     for (const { p: starter, i } of eligible) {
@@ -1561,17 +1579,16 @@ function planEverybodyPlays(state, result) {
       let cost = 0;
       for (let k = 0; k < 3; k++) {
         const r = (i + k) % 6;
-        const eff = effectiveRotationWithLibero(applySubPatterns(rotations[r], [pat], r), libero, level);
-        cost += base[r] - scoreRotation(eff, mode, libero, level, settings, system, roleOf);
+        cost += base[r] - scoreRotation(applySubPatterns(rotations[r], [pat], r), mode, libero, level, settings, system, roleOf, r);
       }
       if (!best || cost < best.cost) best = { pat, cost, starterId: starter.id };
     }
     if (!best) break;
     used.add(best.starterId);
+    planned.add(sub.id);
     patterns.push(best.pat);
     subsUsed += 2;
   }
-  const planned = new Set(patterns.map(p => p.in.id));
   return { patterns, subsUsed, subsCap: cap, benchLeft: bench.filter(p => !planned.has(p.id)) };
 }
 
@@ -1608,11 +1625,11 @@ function resultFromBoard(state) {
   const roleOf = {};
   _fitCache = new Map();
   const patterns = (state.lineup.subPatterns || []).filter(p => !p.auto);
-  const { score, perRotationScores } = scoreLineup(arrangement, mode, libero, patterns, level, settings, system, roleOf);
+  const { score, perRotationScores, libero: libResolved } = scoreLineup(arrangement, mode, libero, patterns, level, settings, system, roleOf);
   const validation = holes
     ? `${missingNames.length ? missingNames.join(', ') : 'Someone'} ${holes === 1 ? 'is' : 'are'} no longer available — drag a bench player onto the empty spot.`
     : null;
-  return { starters, roleOf, arrangement, libero, score, perRotationScores, validation, board, holes };
+  return { starters, roleOf, arrangement, libero: libResolved, score, perRotationScores, validation, board, holes };
 }
 
 /* Board edits. Slot = position in startOrder; zone z in rotation r is slot (z-1+r) mod 6. */
@@ -1703,10 +1720,12 @@ function matchFloor(match, players, liberoReplaces, level) {
   const byId = new Map(players.map(p => [p.id, p]));
   const order = match.onFloor.map(id => byId.get(id) || null);
   if (order.length !== 6) return null;
-  const rot = _rotationsFromStartOrder(order)[match.rotationIndex];
+  const rots = _rotationsFromStartOrder(order);
   const lib = match.liberoId && byId.get(match.liberoId);
-  const libero = lib ? { player: lib, replaces: liberoReplaces || ['MB'] } : null;
-  return effectiveRotationWithLibero(rot, libero, level);
+  const cfg = (S.lineup && S.lineup.liberoConfig) || {};
+  const libero = lib ? { player: lib, replaces: liberoReplaces || ['MB'], servesInRotation: cfg.servesInRotation } : null;
+  if (libero) libero.serveRot = resolveLiberoServeRot(rots, libero, level);
+  return effectiveRotationWithLibero(rots[match.rotationIndex], libero, level, match.rotationIndex);
 }
 
 /* generateLineup: public entry. Returns the new-shape result that the lineup
@@ -1774,9 +1793,9 @@ function generateLineup(state) {
 
   let best = null;
   for (const arr of pool) {
-    const { score, perRotationScores } = scoreLineup(arr, mode, libero, patterns, ruleset, settings, system, roleOf);
+    const { score, perRotationScores, libero: libResolved } = scoreLineup(arr, mode, libero, patterns, ruleset, settings, system, roleOf);
     if (!best || score > best.score) {
-      best = { arrangement: arr, score, perRotationScores };
+      best = { arrangement: arr, score, perRotationScores, libero: libResolved };
     }
   }
 
@@ -1784,7 +1803,7 @@ function generateLineup(state) {
     starters,
     roleOf,
     arrangement: best.arrangement,
-    libero,
+    libero: best.libero,
     score: best.score,
     perRotationScores: best.perRotationScores,
     validation: overridesIgnored
@@ -2147,6 +2166,8 @@ if (typeof window !== 'undefined') {
   window.applySubPatterns = applySubPatterns;
   window.planEverybodyPlays = planEverybodyPlays;
   window.resultFromBoard = resultFromBoard;
+  window.resolveLiberoServeRot = resolveLiberoServeRot;
+  window.effectiveRotationWithLibero = effectiveRotationWithLibero;
   window.canSub = canSub;
   window.applySub = applySub;
   window.pendingPlannedSub = pendingPlannedSub;
@@ -2290,7 +2311,7 @@ function buildPrintLineupDOM() {
   const rots = el('div', { cls: 'print-rotations' });
   (r.arrangement.rotations || []).forEach((raw, i) => {
     // Same pipeline as the screen: planned subs, then the libero swap.
-    const rot = effectiveRotationWithLibero(applySubPatterns(raw, patterns, i), r.libero, level);
+    const rot = effectiveRotationWithLibero(applySubPatterns(raw, patterns, i), r.libero, level, i);
     const sc = (r.perRotationScores[i] || 0).toFixed(1);
     const fr = rot.frontRow || [];
     const br = rot.backRow || [];
@@ -2997,7 +3018,7 @@ function renderCourtView() {
     }));
   }
 
-  const eff = effectiveRotationWithLibero(r.arrangement.rotations[idx], r.libero, level);
+  const eff = effectiveRotationWithLibero(r.arrangement.rotations[idx], r.libero, level, idx);
   const grid = el('div', { cls: 'rot-court big-rot-court' });
   for (const z of [4, 3, 2, 5, 6, 1]) {
     const player = playerAtZone(eff, z);
@@ -3075,7 +3096,7 @@ function renderRotationGrid() {
 
     // Apply libero swap and any sub patterns to compute the on-floor 6.
     const afterSubs = applySubPatterns(rot, patterns, idx);
-    const effective = effectiveRotationWithLibero(afterSubs, r.libero, ruleset);
+    const effective = effectiveRotationWithLibero(afterSubs, r.libero, ruleset, idx);
     const subbedIn = new Set(patterns.filter(p => p.in && _patternActiveAt(p, idx)).map(p => p.in.id));
 
     const court = el('div', { cls: 'rot-court' });
@@ -3104,17 +3125,41 @@ function renderRotationGrid() {
   });
 }
 
-function effectiveRotationWithLibero(rotation, libero, ruleset) {
+/* effectiveRotationWithLibero: the six actually on the floor once the libero
+   swaps in. rotIdx (0-5) enables the NFHS one-serving-spot rule: if her swap
+   lands on the serving spot in a rotation other than libero.serveRot, the
+   player she'd replace serves instead and the libero sits that rotation. */
+function effectiveRotationWithLibero(rotation, libero, ruleset, rotIdx) {
   if (!libero || !libero.player) return rotation;
   const replaces = libero.replaces || ['MB'];
   const backRow = rotation.backRow.slice();
+  if (backRow.some(p => p && p.id === libero.player.id)) return rotation; // already applied
   const idx = backRow.findIndex(p => p && !p._sub && replaces.includes(p.positions && p.positions[0]));
   if (idx < 0) return rotation;
   const isServerSlot = idx === 2;
-  const liberoCanServe = ruleset && ruleset.liberoMayServe;
-  if (isServerSlot && !liberoCanServe) return rotation;
+  if (isServerSlot) {
+    if (!(ruleset && ruleset.liberoMayServe)) return rotation;
+    if (rotIdx != null && libero.serveRot != null && rotIdx !== libero.serveRot) return rotation;
+  }
   backRow[idx] = libero.player;
   return { frontRow: rotation.frontRow.slice(), backRow, server: isServerSlot ? libero.player : rotation.server };
+}
+
+/* resolveLiberoServeRot: which rotation (0-5) the libero serves in for this
+   arrangement. Candidates are the rotations where her swap would land on the
+   serving spot; the coach's choice (liberoConfig.servesInRotation) wins if
+   it's a candidate, otherwise the first one. null = she never serves. */
+function resolveLiberoServeRot(rotations, libero, ruleset) {
+  if (!libero || !libero.player || !(ruleset && ruleset.liberoMayServe)) return null;
+  const replaces = libero.replaces || ['MB'];
+  const candidates = [];
+  rotations.forEach((rot, i) => {
+    const server = rot.backRow[2];
+    if (server && !server._sub && replaces.includes(server.positions && server.positions[0])) candidates.push(i);
+  });
+  if (!candidates.length) return null;
+  const wanted = libero.servesInRotation;
+  return (typeof wanted === 'number' && candidates.includes(wanted)) ? wanted : candidates[0];
 }
 
 function playerAtZone(rotation, zone) {
@@ -3227,10 +3272,35 @@ function renderLiberoPanel() {
   });
   body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'Comes in for' }), replacesWrap]));
 
-  body.appendChild(el('p', { cls: 'hint lb-hint', text:
-    level.liberoMayServe
-      ? 'She may serve (Advanced → Libero may serve), so she stays in when her swap lands on the serving spot.'
-      : 'She may not serve (Advanced → Libero may serve), so she sits out the rotation where her swap would land on the serving spot.' }));
+  if (level.liberoMayServe) {
+    // NFHS: one serving spot per set. Auto = the first rotation where her swap
+    // lands on the serving spot; the coach can pick the other one instead.
+    const serveSel = el('select', {
+      on: { change: e => {
+        cfg.servesInRotation = e.target.value === '' ? null : Number(e.target.value);
+        save();
+        scheduleRegen();
+      } }
+    });
+    const autoOpt = document.createElement('option');
+    autoOpt.value = ''; autoOpt.textContent = 'First spot she reaches (auto)';
+    serveSel.appendChild(autoOpt);
+    const resolved = (S.result && S.result.libero) ? S.result.libero.serveRot : null;
+    for (let i = 0; i < 6; i++) {
+      const o = document.createElement('option');
+      o.value = String(i); o.textContent = `Rotation ${i + 1}`;
+      serveSel.appendChild(o);
+    }
+    serveSel.value = cfg.servesInRotation == null ? '' : String(cfg.servesInRotation);
+    body.appendChild(el('div', { cls: 'lb-row' }, [el('label', { text: 'Serves in' }), serveSel]));
+    body.appendChild(el('p', { cls: 'hint lb-hint', text:
+      resolved == null
+        ? 'Under NFHS she serves from one spot per set. With this lineup her swap never lands on the serving spot, so she won\u2019t serve.'
+        : `Under NFHS she serves from one spot per set. With this lineup she serves in rotation ${resolved + 1}; anywhere else her swap would land on the serving spot, the player she replaces serves and she sits that rotation.` }));
+  } else {
+    body.appendChild(el('p', { cls: 'hint lb-hint', text:
+      'She may not serve (Advanced → Libero may serve), so she sits out any rotation where her swap would land on the serving spot.' }));
+  }
 }
 
 /* Sub patterns: list current patterns + a template picker. Each pattern has
@@ -3350,6 +3420,10 @@ function renderSubPlanPanel() {
   }
   const toggle = $('#everybodyPlaysToggle');
   if (toggle) toggle.checked = S.lineup.everybodyPlays !== false;
+  const setterTog = $('#setterFrontOnlyToggle');
+  const setterRow = $('#setterFrontOnlyRow');
+  if (setterTog) setterTog.checked = !!S.lineup.setterFrontOnly;
+  if (setterRow) setterRow.hidden = (S.settings.system !== '4-2');
 
   const byId = new Map(S.players.map(p => [p.id, p]));
   const tag = p => (S.settings?.showJersey && p.jersey) ? `#${p.jersey} ${p.name}` : (p.name || '(unnamed)');
@@ -3375,7 +3449,7 @@ function renderSubPlanPanel() {
       el('strong', { text: tag(starter) })
     ]));
     row.appendChild(el('div', { cls: 'sub-plan-when', text:
-      `In at rotation ${pat.trigger.rotationIndex + 1} — when ${starter.name.split(' ')[0]} rotates back to serve · out at rotation ${pat.return.rotationIndex + 1}` }));
+      (pat.setterSub ? 'Setter sub · ' : '') + `In at rotation ${pat.trigger.rotationIndex + 1} — when ${starter.name.split(' ')[0]} rotates ${pat.setterSub ? 'to the back row' : 'back to serve'} · out at rotation ${pat.return.rotationIndex + 1}` }));
     row.appendChild(el('button', {
       cls: 'btn btn-secondary btn-tiny sub-plan-x',
       text: '✕',
@@ -4377,6 +4451,11 @@ function init() {
   $('#subPickerCancel')?.addEventListener('click', closeSubPicker);
   $('#subPickerModal')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeSubPicker(); });
 
+  $('#setterFrontOnlyToggle')?.addEventListener('change', e => {
+    S.lineup.setterFrontOnly = !!e.target.checked;
+    save();
+    if (S.result) runGenerate();
+  });
   $('#everybodyPlaysToggle')?.addEventListener('change', e => {
     S.lineup.everybodyPlays = !!e.target.checked;
     save();

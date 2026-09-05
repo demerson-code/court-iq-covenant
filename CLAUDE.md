@@ -12,6 +12,15 @@ repo root via GitHub Pages. Forked from `court-iq-college` at `b66e0d5`.
 - **Plan**: `PLAN.md` (untracked by intent — owns the per-block scope; don't
   duplicate it here)
 
+## Rules baseline
+
+WVSSAC §127-3-30.1: NFHS volleyball rules govern, middle school included
+(§30.10 changes only season dates). `LEVELS` defaults are NFHS: 18 subs per
+set, same-slot re-entry, libero may serve from ONE spot per set
+(`resolveLiberoServeRot` + the `rotIdx` argument to
+`effectiveRotationWithLibero`). Always pass the rotation index when you
+apply the libero, or she will serve from two spots.
+
 ## Level dial (do not bypass)
 
 `settings.level` is `'ms' | 'hs'`. It is the ONE switch that decides what a

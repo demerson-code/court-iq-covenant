@@ -28,6 +28,7 @@ test.beforeEach(async ({ page }) => {
     window.S.lineup.liberoConfig = { playerId: null, replaces: ['MB'], servesInRotation: null };
     window.S.lineup.planExclude = {};
     window.S.lineup.board = null;
+    window.S.lineup.setterFrontOnly = false;
     window.S.lineup.everybodyPlays = true;
     window.S.settings.levelOverrides = {};
   });
@@ -394,5 +395,70 @@ test.describe('the board', () => {
     expect(out.holes).toBe(1);
     expect(out.slot2).toBeNull();
     expect(out.validation).toContain(out.name);
+  });
+});
+
+test.describe('NFHS libero serving spot', () => {
+  test('the libero serves from exactly one rotation per set', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster;
+      window.S.settings.system = '4-2';
+      window.S.settings.level = 'ms';
+      window.S.settings.levelOverrides = { liberoMayServe: true };
+      const r = window.generateLineup(window.S);
+      const level = window.currentLevel();
+      const libId = r.libero.player.id;
+      const serving = r.arrangement.rotations.map((rot, i) => {
+        const eff = window.effectiveRotationWithLibero(rot, r.libero, level, i);
+        return eff.backRow[2] && eff.backRow[2].id === libId;
+      });
+      const candidates = r.arrangement.rotations.map((rot, i) => rot.backRow[2] && r.libero.replaces.includes(rot.backRow[2].positions[0]) ? i : null).filter(x => x !== null);
+      return { serveRot: r.libero.serveRot, serving, candidates };
+    }, ms12);
+    expect(out.candidates.length).toBeGreaterThanOrEqual(2); // two middles opposite each other
+    expect(out.serveRot).toBe(out.candidates[0]);
+    expect(out.serving.filter(Boolean)).toHaveLength(1);
+    expect(out.serving[out.serveRot]).toBe(true);
+  });
+
+  test('the coach can pick the other serving spot', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster;
+      window.S.settings.system = '4-2';
+      window.S.settings.level = 'ms';
+      const r0 = window.generateLineup(window.S);
+      const candidates = r0.arrangement.rotations.map((rot, i) => rot.backRow[2] && r0.libero.replaces.includes(rot.backRow[2].positions[0]) ? i : null).filter(x => x !== null);
+      window.S.lineup.liberoConfig.servesInRotation = candidates[1];
+      const r1 = window.generateLineup(window.S);
+      return { picked: candidates[1], serveRot: r1.libero.serveRot };
+    }, ms12);
+    expect(out.serveRot).toBe(out.picked);
+  });
+});
+
+test.describe('setters play the front row only', () => {
+  test('both setters get a passer first, then everybody-plays continues', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster;
+      window.S.settings.system = '4-2';
+      window.S.settings.level = 'ms';
+      window.S.lineup.setterFrontOnly = true;
+      const r = window.generateLineup(window.S);
+      const plan = window.planEverybodyPlays(window.S, r);
+      const setterIds = r.starters.S.map(p => p.id);
+      return {
+        setterIds,
+        first2Out: plan.patterns.slice(0, 2).map(p => p.out),
+        first2Flag: plan.patterns.slice(0, 2).map(p => !!p.setterSub),
+        total: plan.patterns.length,
+        subsUsed: plan.subsUsed,
+        distinctIn: new Set(plan.patterns.map(p => p.in.id)).size
+      };
+    }, ms12);
+    expect(out.first2Out.sort()).toEqual(out.setterIds.sort());
+    expect(out.first2Flag).toEqual([true, true]);
+    expect(out.total).toBe(5);            // 5 bench players, all still used
+    expect(out.distinctIn).toBe(5);       // each setter has her own passer
+    expect(out.subsUsed).toBe(10);
   });
 });

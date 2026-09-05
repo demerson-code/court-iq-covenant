@@ -818,6 +818,15 @@ Derek: "I don't like the pin system." Pins were the college optimizer's memory o
 
 - [x] Derek: "What is the libero widget doing? We don't have all those positions." Panel rewritten in coach words: a one-line explanation, the libero picker (libero-position players first), **Comes in for** with only this level's positions (Setter / Middle / Outside at MS), and a line saying whether she may serve (pointing at the Advanced toggle). The "Serves in rotation" dropdown was dead — `servesInRotation` was stored but never read — so it's gone. Data shape unchanged.
 
+## Round 7 — NFHS rules (2026-09-05)
+
+WVSSAC §127-3-30.1 makes NFHS the playing rules; §30.10 applies them to middle school with season-length changes only. So the defaults in `LEVELS` are NFHS defaults.
+
+- [x] **Libero serves from one spot per set.** `resolveLiberoServeRot()` picks the rotation (coach's choice under Libero → "Serves in", else the first candidate); `effectiveRotationWithLibero(…, rotIdx)` keeps her out of the serving spot anywhere else, so the middle serves there. `scoreRotation` now uses the shared swap (no duplicate logic) and takes a rotation index. The libero panel says which rotation she serves in.
+- [x] **Setters play the front row only** (`S.lineup.setterFrontOnly`, 4-2 only): the planner gives each setter her own passer first (best DS-fit off the bench, spot-locked re-entry means no sharing), then plans everybody-plays with the rest. Rows are tagged "Setter sub". 31 tests.
+
+Still to verify against the 2025–26 NFHS book (I could not open it): one libero per set; replacement-zone and "one rally between replacements" details. Neither affects the lineup math.
+
 ## Parallel Execution Map
 
 ```
@@ -835,7 +844,7 @@ Blocks 1 and 2 touch different regions of `app.js` (roster/render vs algorithm) 
 |---|---|---|
 | Subs per set | 18 | Advanced → Subs per set |
 | Libero may serve | yes | Advanced → toggle |
-| Libero serves in one rotation only? | not enforced (she serves wherever the swap lands her) | `LEVELS.ms.liberoServeOneSlot` — add if she says yes |
+| Libero serves in one rotation only? | **enforced (NFHS)** — auto or chosen under Libero | Libero → Serves in |
 | "Winning enough" | +5 | Advanced → Sub in when we're up by |
 | Same-slot re-entry | yes | `LEVELS.ms.reentry` |
 | Roster size | planner handles 6–20 | — |
