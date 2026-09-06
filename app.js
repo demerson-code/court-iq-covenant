@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.05-16';
+const APP_VERSION = '2026.09.06-1';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -288,7 +288,7 @@ let S = {
   currentTab: 'roster'      // last-active tab; restored on reload
 };
 
-const VALID_TABS = new Set(['roster', 'lineup', 'scrimmage', 'bench']); // 'bench' arrives in Block 5
+const VALID_TABS = new Set(['roster', 'lineup', 'scrimmage', 'guide', 'bench']);
 const VALID_SYSTEMS = new Set(['4-2', 'simple', '5-1', '6-2']); // keep in step with SYSTEM_REQUIREMENTS
 
 const SORT_MODES = new Set(['avg-desc', 'avg-asc', 'name-asc', 'name-desc']);
@@ -2327,6 +2327,10 @@ if (typeof window !== 'undefined') {
   window.currentLevel = currentLevel;
   window.LEVELS = LEVELS;
   window.APP_VERSION = APP_VERSION;
+  window.startTour = startTour;
+  window.tourGo = tourGo;
+  window.endTour = endTour;
+  window.tourState = () => tour ? { i: tour.i, n: tour.steps.length, doClick: !!tour.steps[tour.i].doClick, target: tour.steps[tour.i].target || null, hasTarget: !!tour.target, last: !!tour.steps[tour.i].last } : null;
   window.chooseStarters = chooseStarters;
   window.arrangeRotation = arrangeRotation;
   window.roleForScoring = roleForScoring;
@@ -4495,6 +4499,213 @@ function openSubPicker({ inId, outId }) {
 }
 function closeSubPicker() { const m = $('#subPickerModal'); if (m) m.hidden = true; }
 
+/* ===== Tutorial — a guided walkthrough with overlays =====
+   Spotlights one control at a time with a card that says what it does.
+   "Do it" steps wait for the coach to tap the real control. Runs on the
+   coach's own roster; loads the sample team only if there aren't enough
+   players, and offers to remove it at the end. */
+const TOUR_KEY = 'court_iq_covenant_tour';
+let tour = null;
+
+function tourSteps() {
+  const genIdx = 9; // index of the Suggest step — lineup steps after it need a result
+  return [
+    { center: true, title: 'Welcome to Court IQ', text: 'This walks you through the app in about two minutes: rate your players, build a starting six, rotate, sub, print, and share. Nothing you do in the tour is permanent — you can change anything afterwards.' },
+    { tab: 'roster', target: '.tabs', title: 'The tabs', text: 'Roster is your team. Lineup is where you build the six and plan subs. Scrimmage splits the team into even practice sides. Guide has this tour and a rules cheat-sheet.' },
+    { tab: 'roster', target: '#addPlayerBtn', title: 'Add players', text: 'One card per girl. Tap here to add one.', ensureRoster: true },
+    { tab: 'roster', target: '.player-card', title: 'A player card', text: 'Tap a name to open her card. Everything about her lives here.', expandFirst: true },
+    { tab: 'roster', target: '.player-card.expanded .skill-grid', title: 'Rate the six skills', text: 'Serve, receive (passing), defense, hit, block, set — 1 to 10. Rate against your own team: a 7 means one of your better ones. The AVG badge updates as you type.' },
+    { tab: 'roster', target: '.player-card.expanded .roster-fields', title: 'Position', text: 'Setter, Middle (your main hitter), Outside (second hitter), Libero — or All-around while you are still deciding.' },
+    { tab: 'roster', target: '.player-card.expanded .intangible-grid', title: 'Attitude and Speed', text: 'These never pick your starters. They decide who comes off the bench first and break ties between two girls who are otherwise equal.' },
+    { tab: 'roster', target: '.player-card.expanded .avail-toggle', title: 'Available?', text: 'Flip this off when she is out — sick, hurt, at a recital. She drops out of the lineup and the bench until you flip it back.' },
+    { tab: 'lineup', target: '#systemSelect', title: 'Your system', text: '4-2 is what you run: two setters, and whichever one is in the front row sets. Simple 6 ignores positions and just puts your best six out.' },
+    { tab: 'lineup', target: '#generateBtn', title: 'Suggest a lineup', text: 'Tap it. The app picks a starting six from the ratings. It is only a suggestion — you are about to change it.', doClick: true, doneWhen: () => !!(S.result && S.result.arrangement) },
+    { tab: 'lineup', target: '#bigCourt', title: 'Rotation 1 — your starting six', text: 'Front row left to right is 4, 3, 2; back row is 5, 6, 1. Position 1 serves. Each card shows her name, position, and average.' },
+    { tab: 'lineup', target: '#scoreCard', title: 'How strong is this rotation?', text: 'The big number is this rotation\u2019s strength. Below it, the six on the floor averaged by skill — green is your best, amber your weakest. Worst / Average / Best compare all six rotations.' },
+    { tab: 'lineup', target: '#rotNext', title: 'Rotate', text: 'Tap Rotate. Everyone moves one spot clockwise, exactly like a side-out.', doClick: true },
+    { tab: 'lineup', target: '#rotDots', title: 'Jump to any rotation', text: 'Tap a number to see that rotation. The amber ring marks your weakest one.' },
+    { tab: 'lineup', target: '#benchCard', title: 'The bench', text: 'Drag a bench card onto a court spot. In rotation 1 that changes your starting six. In rotations 2 to 6 it is a substitution from that rotation on — drag the starter back onto her to bring her back.' },
+    { tab: 'lineup', target: '.bench-item-libero', title: 'The libero', text: 'Drag her onto a starter and she covers that girl in the back row. Libero swaps are free — they never count as subs.', optional: true },
+    { tab: 'lineup', target: '#subPlanPanel', title: 'Your subs', text: 'Every sub you make shows here with a \u2715 to undo it and a running count against your 18. \u201cSetters play the front row only\u201d puts a passer in for each setter automatically.', open: true },
+    { tab: 'lineup', target: '#liberoPanel', title: 'Libero settings', text: 'Who she comes in for, and which rotation she serves in. Under NFHS she serves from one spot per set.', open: true },
+    { tab: 'lineup', target: '#printLineupBtn', title: 'Print', text: 'Prints all six rotations and your subs — exactly what you built, nothing added.' },
+    { tab: 'lineup', target: '#shareBtn', title: 'Share', text: 'Your whole team travels in one link. Tap to copy it and text it to your assistant. Whoever shares last has the latest version.' },
+    { center: true, last: true, title: 'That\u2019s the whole app', text: 'Tap Tutorial in the top bar any time to run this again. The Guide tab has the rules cheat-sheet.' }
+  ].map((st, i) => ({ ...st, needsLineup: i > genIdx && st.tab === 'lineup' }));
+}
+
+function startTour() {
+  if (tour) endTour(false);
+  tour = { steps: tourSteps(), i: 0, loadedDemo: false, dir: 1, cleanup: null };
+  buildTourDom();
+  showTourStep(0);
+}
+
+function buildTourDom() {
+  const root = el('div', { cls: 'tour-root', attrs: { id: 'tourRoot', role: 'dialog', 'aria-label': 'Tutorial' } });
+  ['top', 'left', 'right', 'bottom'].forEach(k => root.appendChild(el('div', { cls: 'tour-mask tour-mask-' + k, dataset: { mask: k } })));
+  root.appendChild(el('div', { cls: 'tour-ring', attrs: { id: 'tourRing' } }));
+  const card = el('div', { cls: 'tour-card', attrs: { id: 'tourCard' } }, [
+    el('div', { cls: 'tour-count', attrs: { id: 'tourCount' } }),
+    el('h3', { cls: 'tour-title', attrs: { id: 'tourTitle' } }),
+    el('p', { cls: 'tour-text', attrs: { id: 'tourText' } }),
+    el('p', { cls: 'tour-do', attrs: { id: 'tourDo' }, text: '\u261D Tap the highlighted button to continue' }),
+    el('div', { cls: 'tour-actions' }, [
+      el('button', { cls: 'btn btn-secondary btn-tiny', attrs: { id: 'tourSkip', type: 'button' }, text: 'Skip tour', on: { click: () => endTour(true) } }),
+      el('span', { cls: 'tour-spacer' }),
+      el('button', { cls: 'btn btn-secondary', attrs: { id: 'tourBack', type: 'button' }, text: '\u2039 Back', on: { click: () => tourGo(-1) } }),
+      el('button', { cls: 'btn btn-primary', attrs: { id: 'tourNext', type: 'button' }, text: 'Next \u203A', on: { click: () => tourGo(1) } }),
+      el('button', { cls: 'btn btn-secondary btn-tiny', attrs: { id: 'tourClearDemo', type: 'button' }, text: 'Remove the sample players', on: { click: () => { removeSampleRoster(); endTour(true); } } })
+    ])
+  ]);
+  root.appendChild(card);
+  document.body.appendChild(root);
+  document.body.classList.add('touring');
+  const onKey = e => { if (e.key === 'Escape') endTour(true); else if (e.key === 'ArrowRight') tourGo(1); else if (e.key === 'ArrowLeft') tourGo(-1); };
+  const onMove = () => positionTour();
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('resize', onMove);
+  window.addEventListener('scroll', onMove, true);
+  tour.cleanup = () => {
+    window.removeEventListener('keydown', onKey);
+    window.removeEventListener('resize', onMove);
+    window.removeEventListener('scroll', onMove, true);
+  };
+}
+
+function tourGo(dir) {
+  if (!tour) return;
+  const st = tour.steps[tour.i];
+  if (st.last && dir > 0) { endTour(true); return; }
+  tour.dir = dir;
+  const n = tour.i + dir;
+  if (n < 0 || n >= tour.steps.length) return;
+  showTourStep(n);
+}
+
+function showTourStep(i) {
+  if (!tour) return;
+  const st = tour.steps[i];
+  tour.i = i;
+  if (tour.stepCleanup) { tour.stepCleanup(); tour.stepCleanup = null; }
+  if (st.tab && S.currentTab !== st.tab) setTab(st.tab);
+  if (st.ensureRoster && S.players.filter(pl => pl.available && (pl.name || '').trim()).length < 7) {
+    loadDemoRoster(); tour.loadedDemo = true; renderRoster(); updateCounts();
+  }
+  if (st.expandFirst) {
+    const card = document.querySelector('.player-card');
+    if (card && !card.classList.contains('expanded')) card.querySelector('.player-card-head').click();
+  }
+  if (st.needsLineup && !(S.result && S.result.arrangement)) runGenerate({ fresh: true });
+  if (st.open) { const d = document.querySelector(st.target); if (d && d.tagName === 'DETAILS') d.open = true; }
+  let target = st.center ? null : document.querySelector(st.target);
+  if (!target && !st.center) {
+    if (st.optional) { showTourStep(i + (tour.dir < 0 ? -1 : 1)); return; }
+    target = null; // fall back to a centered card rather than getting stuck
+  }
+  tour.target = target;
+  $('#tourCount').textContent = `${i + 1} of ${tour.steps.length}`;
+  $('#tourTitle').textContent = st.title;
+  $('#tourText').textContent = st.text;
+  $('#tourDo').hidden = !st.doClick;
+  $('#tourBack').hidden = i === 0;
+  $('#tourNext').hidden = !!st.doClick;
+  $('#tourNext').textContent = st.last ? 'Done' : 'Next \u203A';
+  $('#tourSkip').hidden = !!st.last;
+  $('#tourClearDemo').hidden = !(st.last && tour.loadedDemo);
+  if (target) target.scrollIntoView({ block: 'center', inline: 'nearest' });
+  if (st.doClick && target) {
+    const onDone = () => { setTimeout(() => { if (tour && tour.i === i) showTourStep(i + 1); }, st.doneWhen ? 450 : 350); };
+    const handler = () => onDone();
+    target.addEventListener('click', handler, { once: true });
+    tour.stepCleanup = () => target.removeEventListener('click', handler);
+  }
+  requestAnimationFrame(() => requestAnimationFrame(positionTour));
+}
+
+function positionTour() {
+  if (!tour) return;
+  const root = $('#tourRoot'); if (!root) return;
+  const card = $('#tourCard'), ring = $('#tourRing');
+  const masks = { top: root.querySelector('[data-mask="top"]'), left: root.querySelector('[data-mask="left"]'), right: root.querySelector('[data-mask="right"]'), bottom: root.querySelector('[data-mask="bottom"]') };
+  const W = window.innerWidth, H = window.innerHeight;
+  const t = tour.target;
+  const phone = W < 640;
+  if (!t) {
+    // Centered card, full dim.
+    Object.assign(masks.top.style, { top: '0', left: '0', width: W + 'px', height: H + 'px' });
+    [masks.left, masks.right, masks.bottom].forEach(m => Object.assign(m.style, { width: '0', height: '0' }));
+    ring.hidden = true;
+    card.classList.add('is-centered');
+    card.style.left = ''; card.style.top = '';
+    return;
+  }
+  const pad = 8;
+  const r = t.getBoundingClientRect();
+  const x = Math.max(0, r.left - pad), y = Math.max(0, r.top - pad);
+  const w = Math.min(W - x, r.width + pad * 2), h = Math.min(H - y, r.height + pad * 2);
+  Object.assign(masks.top.style,    { top: '0', left: '0', width: W + 'px', height: y + 'px' });
+  Object.assign(masks.bottom.style, { top: (y + h) + 'px', left: '0', width: W + 'px', height: Math.max(0, H - y - h) + 'px' });
+  Object.assign(masks.left.style,   { top: y + 'px', left: '0', width: x + 'px', height: h + 'px' });
+  Object.assign(masks.right.style,  { top: y + 'px', left: (x + w) + 'px', width: Math.max(0, W - x - w) + 'px', height: h + 'px' });
+  ring.hidden = false;
+  Object.assign(ring.style, { top: y + 'px', left: x + 'px', width: w + 'px', height: h + 'px' });
+  card.classList.remove('is-centered');
+  if (phone) { card.style.left = ''; card.style.top = ''; card.classList.add('is-docked'); return; }
+  card.classList.remove('is-docked');
+  const cw = Math.min(380, W - 24);
+  card.style.width = cw + 'px';
+  const ch = card.offsetHeight || 200;
+  let top = y + h + 14;
+  if (top + ch > H - 12) top = Math.max(12, y - ch - 14);
+  if (top + ch > H - 12) top = Math.max(12, H - ch - 12); // very tall target: overlap edge
+  let left = x + w / 2 - cw / 2;
+  left = Math.max(12, Math.min(W - cw - 12, left));
+  card.style.top = top + 'px';
+  card.style.left = left + 'px';
+}
+
+function endTour(markDone) {
+  if (!tour) return;
+  if (tour.stepCleanup) tour.stepCleanup();
+  if (tour.cleanup) tour.cleanup();
+  const root = $('#tourRoot'); if (root) root.remove();
+  document.body.classList.remove('touring');
+  tour = null;
+  if (markDone) safeStorage.set(TOUR_KEY, 'done');
+}
+
+function removeSampleRoster() {
+  S.players = [];
+  S.lineup.board = null;
+  S.lineup.subPatterns = [];
+  S.lineup.liberoConfig = { ...S.lineup.liberoConfig, covers: [], playerId: null };
+  S.result = null;
+  save();
+  renderRoster();
+  updateCounts();
+  const wrap = $('#lineupResult'); if (wrap) wrap.hidden = true;
+  setTab('roster');
+  toast('Sample players removed. Add your team.', 3000);
+}
+
+/* First visit: a small invitation, not the full overlay. */
+function maybeInviteTour() {
+  if (safeStorage.get(TOUR_KEY)) return;
+  if (document.getElementById('tourInvite')) return;
+  const card = el('div', { cls: 'tour-invite', attrs: { id: 'tourInvite', role: 'status' } }, [
+    el('div', { cls: 'tour-invite-text' }, [
+      el('strong', { text: 'New here? ' }),
+      document.createTextNode('A two-minute tour shows you the whole app.')
+    ]),
+    el('div', { cls: 'tour-invite-actions' }, [
+      el('button', { cls: 'btn btn-secondary btn-tiny', attrs: { type: 'button' }, text: 'Not now', on: { click: () => { safeStorage.set(TOUR_KEY, 'dismissed'); card.remove(); } } }),
+      el('button', { cls: 'btn btn-primary btn-tiny', attrs: { type: 'button' }, text: 'Take the tour', on: { click: () => { card.remove(); startTour(); } } })
+    ])
+  ]);
+  document.body.appendChild(card);
+}
+
 /* ===== Level gating =====
    HS-only controls are marked data-hs-only in the HTML. System <option>s are
    marked data-system and hidden when the current level doesn't offer that
@@ -4680,6 +4891,10 @@ function init() {
       if (input) input.focus();
     });
   });
+
+  $('#tourBtn')?.addEventListener('click', startTour);
+  $('#guideTourBtn')?.addEventListener('click', startTour);
+  setTimeout(maybeInviteTour, 900);
 
   $('#loadDemoBtn')?.addEventListener('click', () => {
     loadDemoRoster();

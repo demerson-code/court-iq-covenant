@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Court IQ">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
   <title>Court IQ — Covenant</title>
-  <link rel="stylesheet" href="styles.css?v=2026.09.05-16">
+  <link rel="stylesheet" href="styles.css?v=2026.09.06-1">
 </head>
 <body>
   <header class="topbar">
@@ -28,6 +28,7 @@
           title="Click to edit team name"
         >Covenant Middle School</span></h1>
       </div>
+      <button class="icon-btn icon-btn-text" id="tourBtn" title="Take the tutorial" aria-label="Tutorial"><span class="icon-btn-emoji">🎓</span><span class="icon-btn-label">Tutorial</span></button>
       <button class="icon-btn" id="themeToggle" title="Light / dark" aria-label="Toggle dark mode">🌙</button>
       <button class="icon-btn" id="shareBtn" title="Copy share link" aria-label="Share">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
@@ -68,6 +69,10 @@
     <button class="tab" data-tab="scrimmage" role="tab">
       <span class="tab-icon">🆚</span>
       <span class="tab-label">Scrimmage</span>
+    </button>
+    <button class="tab" data-tab="guide" role="tab">
+      <span class="tab-icon">📖</span>
+      <span class="tab-label">Guide</span>
     </button>
     <button class="tab" data-tab="bench" role="tab">
       <span class="tab-icon">📋</span>
@@ -263,6 +268,53 @@
       </section>
     </section>
 
+    <!-- GUIDE TAB -->
+    <section class="tab-panel" id="guideTab" role="tabpanel">
+      <div class="guide-hero">
+        <h2>How to use Court IQ</h2>
+        <p class="hint">The fastest way to learn it is the tour — it walks you through every button on your own roster.</p>
+        <button class="btn btn-primary" id="guideTourBtn" type="button">🎓 Start the two-minute tour</button>
+      </div>
+
+      <div class="guide-grid">
+        <section class="guide-card">
+          <h3>1 · Rate your team</h3>
+          <p>On <strong>Roster</strong>, open each girl's card and rate the six skills 1–10 against your own team. Pick a position, or leave her All-around. Flip the switch off when she's out.</p>
+        </section>
+        <section class="guide-card">
+          <h3>2 · Get a starting six</h3>
+          <p>On <strong>Lineup</strong>, pick your system (4-2) and tap <strong>Suggest lineup</strong>. That's a suggestion — the court is yours from there.</p>
+        </section>
+        <section class="guide-card">
+          <h3>3 · Make it yours</h3>
+          <p>In <strong>rotation 1</strong>, drag a bench player onto a spot to put her in, or drag two court players to swap them. Tap <strong>Rotate</strong> to walk the set.</p>
+        </section>
+        <section class="guide-card">
+          <h3>4 · Subs</h3>
+          <p>In <strong>rotations 2–6</strong> a drag is a substitution: a bench player dropped on a spot comes in from that rotation on. Drag the starter back onto her to bring her back. Your subs list under the court with a ✕.</p>
+        </section>
+        <section class="guide-card">
+          <h3>5 · The libero</h3>
+          <p>She's always on the bench. Drag her onto a starter and she covers that girl in the back row — free, no sub used. The Libero panel shows who she's in for and where she serves.</p>
+        </section>
+        <section class="guide-card">
+          <h3>6 · Print and share</h3>
+          <p><strong>Print</strong> gives you all six rotations and your subs on one sheet. The <strong>🔗</strong> button copies a link that carries your whole team — text it to your assistant; whoever shares last has the latest.</p>
+        </section>
+      </div>
+
+      <section class="guide-rules">
+        <h3>Rules cheat-sheet (NFHS)</h3>
+        <ul>
+          <li><strong>18 subs per set.</strong> Every time a player walks on counts one; in-and-back-out is two. Resets each set.</li>
+          <li><strong>Re-entry is spot-locked.</strong> A player who goes out can only come back in for the girl who replaced her, in that spot.</li>
+          <li><strong>The libero</strong> plays the back row only, swaps freely (never a sub), can't block or attack above the net, and may serve from <em>one</em> rotation spot per set.</li>
+          <li><strong>One libero per set.</strong> You can name a different one next set.</li>
+        </ul>
+        <p class="hint">Your current league may set a different sub count — change it under Advanced on the Lineup tab.</p>
+      </section>
+    </section>
+
     <!-- BENCH TAB -->
     <section class="tab-panel" id="benchTab" role="tabpanel">
       <div class="empty-state" id="benchNoLineup" hidden>
@@ -377,6 +429,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2026.09.05-16"></script>
+  <script src="app.js?v=2026.09.06-1"></script>
 </body>
 </html>

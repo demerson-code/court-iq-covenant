@@ -865,6 +865,12 @@ Could not reproduce: pointer-event drags (rotation-1 swap, rotation-3 sub) then 
 - [x] `refuse()`: red toast, 6.5s, plain-English rule text (re-entry, both-on-the-floor, sub-for-a-sub, libero).
 - [x] While dragging a subbed-out player in rotations 2–6, the one spot she may re-enter (her replacement's) is outlined green and the rest dim.
 
+## Round 16 — tutorial + phone (2026-09-05)
+
+- [x] **Guided tour** (`startTour` / `tourSteps`): 21 steps, spotlight ring + four mask panels + a card; "do it" steps (Suggest, Rotate) wait for the real tap; runs on the coach's roster, loads the sample only if under 7 players and offers to remove it at the end. Launched from a topbar **Tutorial** button, the Guide tab, and a one-time first-visit invite (`court_iq_covenant_tour`). Playwright walks every step.
+- [x] **Guide tab**: start button, six one-paragraph cards, NFHS cheat-sheet.
+- [x] **Phone pass** (≤639px): tabs docked to the bottom with safe-area padding, compact topbar, court zones sized for 375px with wrapping names, compact score card, two-column bench (no horizontal scroll, so drags never fight a swipe), tour card docked above the tab bar.
+
 ## Parallel Execution Map
 
 ```

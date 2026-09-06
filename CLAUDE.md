@@ -92,6 +92,16 @@ decodes with intangibles defaulting to 5.
 - **Algorithm functions are exposed on `window`** for `page.evaluate` tests.
   `window.S` is exposed via a getter. Don't break this.
 
+## Tutorial + phone
+
+`startTour()` / `tourSteps()` in app.js: a spotlight overlay (four mask
+panels + ring + card). Steps target selectors; "do it" steps (`doClick`)
+wait for the real tap. The Playwright test walks every step — if you move
+or rename a control, update the step's `target` or the test will tell you.
+Phone rules live under `@media (max-width: 639px)`: bottom tab bar, compact
+court, two-column bench (no horizontal scroll, on purpose — it would fight
+finger drags).
+
 ## Print
 
 `#printSheet` is a hidden div. Click handlers populate it with a fresh DOM

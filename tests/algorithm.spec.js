@@ -630,3 +630,37 @@ test.describe('coach subs cannot overlap', () => {
     for (const n of out.dup) expect(n).toBeLessThanOrEqual(1);
   });
 });
+
+test.describe('guided tour', () => {
+  test('walks every step on the sample roster without getting stuck', async ({ page }) => {
+    const out = await page.evaluate(async () => {
+      localStorage.removeItem('court_iq_covenant_tour');
+      window.S.players = [];
+      window.startTour();
+      const visited = [];
+      let guard = 0;
+      while (guard++ < 60) {
+        const st = window.tourState();
+        if (!st) break;
+        visited.push({ i: st.i, target: st.target, hasTarget: st.hasTarget });
+        if (st.last) { window.tourGo(1); break; }
+        if (st.doClick) {
+          document.querySelector(st.target).click();
+          await new Promise(r => setTimeout(r, 700));
+        } else {
+          window.tourGo(1);
+          await new Promise(r => setTimeout(r, 60));
+        }
+      }
+      return { visited, ended: window.tourState() === null, players: window.S.players.length, hasLineup: !!(window.S.result && window.S.result.arrangement), rot: window.S.viewRot, done: localStorage.getItem('court_iq_covenant_tour') };
+    });
+    expect(out.ended).toBe(true);
+    expect(out.players).toBe(12);            // sample roster was loaded for the tour
+    expect(out.hasLineup).toBe(true);        // the "tap Suggest" step really generated
+    expect(out.rot).toBe(1);                 // the "tap Rotate" step really rotated
+    expect(out.done).toBe('done');
+    const missing = out.visited.filter(v => v.target && !v.hasTarget);
+    expect(missing).toEqual([]);             // every spotlighted control existed
+    expect(out.visited.length).toBeGreaterThanOrEqual(19);
+  });
+});
