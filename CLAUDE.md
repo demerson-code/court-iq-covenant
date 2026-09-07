@@ -159,6 +159,21 @@ Beyond those:
   round-by-round history after the coach's first look.
 - Pending: iPad device check, the coach's league sub cap.
 
+## Partners (front row / back row pairs)
+
+`S.lineup.partners = [{ id, front, back, mode: 'rows' | 'split', at }]`.
+Whichever of the two is on the board is the starter; `partnerPatterns()`
+turns each pair into ONE sub pattern (`coach:true, partner:<pairId>,
+partnerMode, partnerRow | partnerAt`) on every `runGenerate`. `rows` swaps
+at the row change (in at the serving spot, back three later); `split` brings
+the other girl in at rotation `at` through rotation 6 (return 0),
+so the court, score card, print diagrams and sub count all see it as a hand
+sub. Partner patterns are never persisted — the pairs are (share link and
+saved cards both carry `partners`). Conflicts never fail silently: both on
+the board, libero coverage, a clashing hand sub, or an unavailable partner
+become `S.partnerNotes` shown in the Partners panel. Drags onto a partnered
+spot in rotations 2–6 are refused with a message naming the pair.
+
 ## Libero
 
 Coverage is by player: `liberoConfig.covers` (starter ids), set by dragging

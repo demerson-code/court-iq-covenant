@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
   <title>Court IQ — Covenant</title>
-  <link rel="stylesheet" href="styles.css?v=2026.09.06-4">
+  <link rel="stylesheet" href="styles.css?v=2026.09.07-1">
 </head>
 <body>
   <header class="topbar">
@@ -178,6 +178,14 @@
               <div class="lb-panel-body" id="liberoPanelBody"></div>
             </details>
 
+            <details class="lb-panel" id="partnersPanel">
+              <summary>Partners <span class="lb-counter" id="partnersCounter"></span></summary>
+              <div class="lb-panel-body partners-body">
+                <p class="hint">Two girls who share one spot. Whichever one is on the court starts. <strong>Front row / back row</strong>: the other comes in when the spot changes rows and they swap back three rotations later. <strong>Split the trip</strong>: the other comes in at a rotation you pick and plays through rotation 6. Each pair uses 2 subs.</p>
+                <div id="partnersBody"></div>
+              </div>
+            </details>
+
             <details class="lb-panel" id="subPlanPanel" open>
               <summary>Sub plan <span class="lb-counter" id="subsCounter"></span></summary>
               <div class="lb-panel-body sub-plan-body">
@@ -305,7 +313,7 @@
         </section>
         <section class="guide-card">
           <h3>4 · Subs</h3>
-          <p>In <strong>rotations 2–6</strong> a drag is a substitution: a bench player dropped on a spot comes in from that rotation on. Drag the starter back onto her to bring her back. Your subs list under the court with a ✕.</p>
+          <p>In <strong>rotations 2–6</strong> a drag is a substitution: a bench player dropped on a spot comes in from that rotation on. Drag the starter back onto her to bring her back. Your subs list under the court with a ✕. <strong>Partners</strong> (under the court) are two girls who share a spot, one front row and one back row, and the swap is drawn in for you.</p>
         </section>
         <section class="guide-card">
           <h3>5 · The libero</h3>
@@ -459,6 +467,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2026.09.06-4"></script>
+  <script src="app.js?v=2026.09.07-1"></script>
 </body>
 </html>

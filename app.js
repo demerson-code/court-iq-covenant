@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.06-4';
+const APP_VERSION = '2026.09.07-1';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -198,6 +198,12 @@ function defaultLineup() {
   // subPatterns:      [{ id, out, in, trigger:{rotationIndex,event}, return?: {...}, auto? }]
   //                   auto:true = written by planEverybodyPlays; never persisted
   // pairings:         [{ a: playerId, b: playerId }] — both must be starters together
+  // partners:         [{ id, front, back, mode:'rows'|'split', at }] — two girls who share
+  //                   one spot. rows: `front` plays the front row, `back` the back row.
+  //                   split: whoever is on the board starts, the other comes in at
+  //                   rotation `at` (2–6) and plays through rotation 6. Turned into
+  //                   subPatterns (coach:true, partner:<pairId>) on every Generate by
+  //                   partnerPatterns(); those patterns are never persisted.
   // everybodyPlays:   run the sub planner after every Generate
   // planExclude:      { starterId: true } — starters the coach won't sub out
   // board:            { startOrder: [6 playerIds by starting zone], liberoId } — THE lineup.
@@ -209,6 +215,7 @@ function defaultLineup() {
     liberoConfig: { playerId: null, covers: [], replaces: ['MB'], servesInRotation: null },
     subPatterns: [],
     pairings: [],
+    partners: [],
     everybodyPlays: true,
     planExclude: {},
     setterFrontOnly: false,  // 4-2 only: a passer subs in for each setter's back-row trip
@@ -412,8 +419,9 @@ function save(opts = {}) {
       optimizationMode: S.lineup.optimizationMode,
       overrides: S.lineup.overrides,
       liberoConfig: S.lineup.liberoConfig,
-      subPatterns: S.lineup.subPatterns.filter(p => !p.auto).map(p => ({ ...p, in: p.in ? { id: p.in.id } : null })), // planned subs are re-derived on Generate; `in` relinks by id on load
+      subPatterns: S.lineup.subPatterns.filter(p => !p.auto && !p.partner).map(p => ({ ...p, in: p.in ? { id: p.in.id } : null })), // planned subs are re-derived on Generate; `in` relinks by id on load
       pairings: S.lineup.pairings,
+      partners: S.lineup.partners || [],
       everybodyPlays: S.lineup.everybodyPlays !== false,
       planExclude: S.lineup.planExclude || {},
       setterFrontOnly: !!S.lineup.setterFrontOnly,
@@ -577,9 +585,10 @@ function applyLoadedState(data) {
             covers: Array.isArray(data.lineup.liberoConfig.covers) ? data.lineup.liberoConfig.covers.filter(x => typeof x === 'string') : [] }
         : defaultLineup().liberoConfig,
       subPatterns: Array.isArray(data.lineup.subPatterns)
-        ? data.lineup.subPatterns.filter(p => p && !p.auto).map(p => ({ ...p, in: (p.in && p.in.id) ? (S.players.find(x => x.id === p.in.id) || null) : null }))
+        ? data.lineup.subPatterns.filter(p => p && !p.auto && !p.partner).map(p => ({ ...p, in: (p.in && p.in.id) ? (S.players.find(x => x.id === p.in.id) || null) : null }))
         : [],
       pairings: Array.isArray(data.lineup.pairings) ? data.lineup.pairings : [],
+      partners: normalizePartners(data.lineup.partners),
       everybodyPlays: data.lineup.everybodyPlays !== false,
       planExclude: (data.lineup.planExclude && typeof data.lineup.planExclude === 'object') ? data.lineup.planExclude : {},
       setterFrontOnly: !!data.lineup.setterFrontOnly,
@@ -663,7 +672,7 @@ function encodeStateForUrl() {
     p: S.players.map(compactPlayer),
     w: SKILLS.map(k => S.weights[k] | 0),
     cfg: S.settings,
-    ln: { ...S.lineup, subPatterns: S.lineup.subPatterns.filter(p => !p.auto).map(p => ({ ...p, in: p.in ? { id: p.in.id } : null })) },
+    ln: { ...S.lineup, subPatterns: S.lineup.subPatterns.filter(p => !p.auto && !p.partner).map(p => ({ ...p, in: p.in ? { id: p.in.id } : null })) },
     e: S.lastEdited || undefined
   };
   return b64urlEncode(JSON.stringify(compact));
@@ -1655,6 +1664,10 @@ function normalizeSavedLineups(list) {
       covers: Array.isArray(sv.covers) ? sv.covers.filter(x => typeof x === 'string') : [],
       servesInRotation: Number.isInteger(sv.servesInRotation) ? sv.servesInRotation : null,
       setterFrontOnly: !!sv.setterFrontOnly,
+      partners: Array.isArray(sv.partners)
+        ? sv.partners.filter(x => x && typeof x.front === 'string' && typeof x.back === 'string')
+            .map(x => ({ front: x.front, back: x.back, mode: x.mode === 'split' ? 'split' : 'rows', at: (Number.isInteger(x.at) && x.at >= 2 && x.at <= 6) ? x.at : 4 }))
+        : [],
       subs: Array.isArray(sv.subs)
         ? sv.subs.filter(x => x && typeof x.out === 'string' && typeof x.in === 'string')
             .map(x => ({ out: x.out, in: x.in, at: Number.isInteger(x.at) ? x.at : 1, back: Number.isInteger(x.back) ? x.back : 0 }))
@@ -1676,7 +1689,8 @@ function lineupSnapshot(state) {
     covers: (cfg.covers || []).slice(),
     servesInRotation: Number.isInteger(cfg.servesInRotation) ? cfg.servesInRotation : null,
     setterFrontOnly: !!state.lineup.setterFrontOnly,
-    subs: coachPatterns(state).map(pt => ({
+    partners: (state.lineup.partners || []).filter(pr => pr.front && pr.back).map(pr => ({ front: pr.front, back: pr.back, mode: pr.mode === 'split' ? 'split' : 'rows', at: pr.at || 4 })),
+    subs: coachPatterns(state).filter(pt => !pt.partner).map(pt => ({
       out: pt.out, in: pt.in.id,
       at: pt.trigger.rotationIndex,
       back: (pt.return && Number.isInteger(pt.return.rotationIndex)) ? pt.return.rotationIndex : 0
@@ -1690,6 +1704,8 @@ function snapshotEquals(a, b) {
   if (a.system !== b.system) return false;
   if ((a.liberoId || null) !== (b.liberoId || null)) return false;
   if (!!a.setterFrontOnly !== !!b.setterFrontOnly) return false;
+  const partnerKey = s => (s.partners || []).map(x => x.front + '>' + x.back + ':' + (x.mode === 'split' ? 'split@' + x.at : 'rows')).sort().join(';');
+  if (partnerKey(a) !== partnerKey(b)) return false;
   if ((Number.isInteger(a.servesInRotation) ? a.servesInRotation : null) !== (Number.isInteger(b.servesInRotation) ? b.servesInRotation : null)) return false;
   if (a.startOrder.join(',') !== b.startOrder.join(',')) return false;
   if (a.covers.slice().sort().join(',') !== b.covers.slice().sort().join(',')) return false;
@@ -1708,7 +1724,7 @@ function savedLineupById(id) {
 function savedLineupStatus(sv, state) {
   state = state || S;
   const byId = new Map(state.players.map(pl => [pl.id, pl]));
-  const ids = sv.startOrder.concat(sv.liberoId ? [sv.liberoId] : [], sv.subs.map(x => x.in));
+  const ids = sv.startOrder.concat(sv.liberoId ? [sv.liberoId] : [], sv.subs.map(x => x.in), (sv.partners || []).flatMap(x => [x.front, x.back]));
   let gone = 0; const out = [];
   ids.forEach(id => {
     if (!id) return;
@@ -1792,6 +1808,9 @@ function loadSavedLineup(id) {
   const cfg = S.lineup.liberoConfig || defaultLineup().liberoConfig;
   S.lineup.liberoConfig = { ...cfg, playerId: sv.liberoId || null, covers: sv.covers.slice(), servesInRotation: sv.servesInRotation };
   S.lineup.setterFrontOnly = !!sv.setterFrontOnly;
+  S.lineup.partners = (sv.partners || [])
+    .filter(x => byId.has(x.front) && byId.has(x.back))
+    .map(x => ({ id: 'pr_' + genId(), front: x.front, back: x.back, mode: x.mode === 'split' ? 'split' : 'rows', at: x.at || 4 }));
   S.lineup.subPatterns = (S.lineup.subPatterns || []).filter(pt => pt && !pt.coach && !pt.auto).concat(
     sv.subs.map(x => byId.has(x.in) ? {
       id: 'coach_' + genId(), out: x.out, in: byId.get(x.in),
@@ -1948,6 +1967,114 @@ function resultFromBoard(state) {
   return { starters, roleOf, arrangement, libero: libResolved, score, perRotationScores, validation, board, holes };
 }
 
+/* ===== Partners =====
+   Two girls who share one spot: `front` plays the front row, `back` plays
+   the back row. Whichever one is on the board is the starter; the other
+   comes in for her when the spot changes rows and they swap back three
+   rotations later. Pure: reads the board, returns the patterns to add
+   (coach:true so they draw on the court, count, and print like hand subs)
+   plus plain-words notes for pairs that can't run right now. */
+function normalizePartners(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(pr => pr && typeof pr === 'object')
+    .map(pr => ({
+      id: (typeof pr.id === 'string' && pr.id) ? pr.id : 'pr_' + genId(),
+      front: typeof pr.front === 'string' ? pr.front : null,
+      back: typeof pr.back === 'string' ? pr.back : null,
+      mode: pr.mode === 'split' ? 'split' : 'rows',
+      at: (Number.isInteger(pr.at) && pr.at >= 2 && pr.at <= 6) ? pr.at : 4
+    }));
+}
+
+function partnerPatterns(state) {
+  state = state || S;
+  const out = { patterns: [], notes: [] };
+  const board = state.lineup && state.lineup.board;
+  const pairs = (state.lineup && state.lineup.partners) || [];
+  if (!board || !Array.isArray(board.startOrder) || !pairs.length) return out;
+  const byId = new Map(state.players.map(p => [p.id, p]));
+  const cfg = state.lineup.liberoConfig || {};
+  const libId = cfg.playerId || board.liberoId || null;
+  const covers = Array.isArray(cfg.covers) ? cfg.covers : [];
+  const hand = (state.lineup.subPatterns || []).filter(p => p && p.coach && !p.partner && p.in && p.out);
+  pairs.forEach(pr => {
+    const f = pr.front ? byId.get(pr.front) : null;
+    const b = pr.back ? byId.get(pr.back) : null;
+    if (!f || !b || f.id === b.id) return; // half a pair — nothing to run yet
+    const names = f.name + ' and ' + b.name;
+    if (f.id === libId || b.id === libId) {
+      out.notes.push((f.id === libId ? f.name : b.name) + ' is the libero, so the ' + names + ' pair isn\u2019t used \u2014 she swaps on her own.');
+      return;
+    }
+    const fi = board.startOrder.indexOf(f.id);
+    const bi = board.startOrder.indexOf(b.id);
+    if (fi >= 0 && bi >= 0) { out.notes.push(names + ' are partners but both are starting \u2014 take one off the board to run the swap.'); return; }
+    if (fi < 0 && bi < 0) { out.notes.push(names + ' are partners but neither is on the board.'); return; }
+    const starter = fi >= 0 ? f : b;
+    const other = fi >= 0 ? b : f;
+    if (!other.available) { out.notes.push(other.name + ' is marked unavailable, so ' + starter.name + ' plays the whole trip.'); return; }
+    const clash = hand.find(pt => pt.out === starter.id || pt.out === other.id || pt.in.id === other.id || pt.in.id === starter.id);
+    if (clash) {
+      const clashOut = byId.get(clash.out);
+      out.notes.push(names + ' have a hand sub (' + clash.in.name + ' in for ' + (clashOut ? clashOut.name : '?') + ' at rotation ' + (clash.trigger.rotationIndex + 1) + '). Remove it under Sub plan to run the pair.');
+      return;
+    }
+    if (pr.mode === 'split') {
+      // Split the trip: the starter plays from rotation 1, the other comes in
+      // at `at` and plays through rotation 6 (return 0 = end of trip).
+      const at = (Number.isInteger(pr.at) && pr.at >= 2 && pr.at <= 6) ? pr.at : 4;
+      if (bi >= 0) out.notes.push(b.name + ' is on the board, so she starts and ' + f.name + ' comes in at rotation ' + at + ' \u2014 swap them on the court if you meant it the other way round.');
+      out.patterns.push({
+        id: 'partner_' + pr.id,
+        out: starter.id, in: other,
+        trigger: { rotationIndex: at - 1, event: 'in' },
+        return: { rotationIndex: 0, event: 'in' },
+        coach: true, partner: pr.id, partnerMode: 'split', partnerAt: at
+      });
+      return;
+    }
+    if (covers.includes(starter.id)) {
+      out.notes.push('The libero already covers ' + starter.name + ' in the back row, so ' + other.name + ' isn\u2019t used. Change who the libero covers to run the pair.');
+      return;
+    }
+    // startOrder index i is the rotation where this spot reaches the serving
+    // position (enters the back row); it reaches left front three later.
+    const i = fi >= 0 ? fi : bi;
+    const inAt = fi >= 0 ? i : (i + 3) % 6;
+    out.patterns.push({
+      id: 'partner_' + pr.id,
+      out: starter.id, in: other,
+      trigger: { rotationIndex: inAt, event: 'in' },
+      return: { rotationIndex: (inAt + 3) % 6, event: 'in' },
+      coach: true, partner: pr.id, partnerMode: 'rows', partnerRow: fi >= 0 ? 'back' : 'front'
+    });
+  });
+  return out;
+}
+
+/* partnerPatternFor: the partner pattern a player is bound by, as starter
+   or as the one coming in, or null. */
+function partnerPatternFor(playerId, state) {
+  return coachPatterns(state).find(pt => pt.partner && (pt.out === playerId || pt.in.id === playerId)) || null;
+}
+
+/* patternRotationsText: "2, 3, 4" — the rotations a pattern is active in,
+   in trip order from where it starts (so a wrap reads "5, 6, 1"). */
+function patternRotationsText(pat) {
+  const rots = [];
+  for (let r = 0; r < 6; r++) if (_patternActiveAt(pat, r)) rots.push(r);
+  const start = pat.trigger.rotationIndex;
+  rots.sort((a, b) => ((a - start + 6) % 6) - ((b - start + 6) % 6));
+  return rots.map(r => r + 1).join(', ');
+}
+
+function removePartnerPair(id) {
+  S.lineup.partners = (S.lineup.partners || []).filter(pr => pr.id !== id);
+  save();
+  if (S.lineup.board) runGenerate(); else renderPartnersPanel();
+}
+
 /* Coach subs: sub patterns the coach made by dragging in rotations 2-6.
    Shape is the ordinary subPattern shape plus coach:true. `return` of
    rotation 0 means "through the end of the trip around". */
@@ -1986,6 +2113,12 @@ function coachSubDrop(idx, zone, inId) {
   }
   if (target.id === libId) { refuse('The libero swaps on her own — change who she covers under Libero.'); return false; }
   if (inId === libId) { toast('She\u2019s the libero — change that under Libero first.', 3000); return false; }
+  const bound = partnerPatternFor(target.id) || partnerPatternFor(inId);
+  if (bound) {
+    const st = S.players.find(p => p.id === bound.out);
+    refuse((st ? st.name : 'She') + ' and ' + bound.in.name + ' are partners \u2014 their swap is automatic. Remove the pair under Partners to sub by hand.');
+    return false;
+  }
   const coach = coachPatterns();
   // Return leg: the starter comes back in for the girl who replaced her.
   const back = coach.find(pt => pt.in.id === target.id && pt.out === inId && _patternActiveAt(pt, idx));
@@ -2071,6 +2204,7 @@ function liberoCoverDrop(idx, zone) {
 function coachSubOut(idx, playerId) {
   const pat = coachPatterns().find(pt => pt.in.id === playerId && _patternActiveAt(pt, idx));
   if (!pat) { refuse('She’s a starter. To take her out, drag a bench player onto her spot.'); return false; }
+  if (pat.partner) { refuse('She\u2019s in as a partner \u2014 remove the pair under Partners to change that.'); return false; }
   const byId = new Map(S.players.map(p => [p.id, p]));
   if (pat.trigger.rotationIndex === idx) S.lineup.subPatterns = S.lineup.subPatterns.filter(x => x !== pat);
   else pat.return = { rotationIndex: idx, event: 'in' };
@@ -2630,6 +2764,8 @@ if (typeof window !== 'undefined') {
   window.runGenerate = runGenerate;
   window.boardSwap = boardSwap;
   window.coachPatterns = coachPatterns;
+  window.partnerPatterns = partnerPatterns;
+  window.partnerPatternFor = partnerPatternFor;
   window.save = save;
   window.encodeStateForUrl = encodeStateForUrl;
   window.lineupSnapshot = lineupSnapshot;
@@ -2833,11 +2969,11 @@ function buildPrintLineupDOM() {
       const first = starter ? starter.name.split(' ')[0] : '';
       return el('tr', {}, [
         el('td', { cls: 'num', text: String(i + 1) }),
-        el('td', { text: tagOf(pat.in) + (pat.in.name || '—') }),
+        el('td', { text: tagOf(pat.in) + (pat.in.name || '—') + (pat.partner ? (pat.partnerMode === 'split' ? ' (partner, from rotation ' + pat.partnerAt + ')' : ' (partner, ' + pat.partnerRow + ' row)') : '') }),
         el('td', { text: starter ? tagOf(starter) + (starter.name || '—') : '—' }),
         el('td', { text: 'Rotation ' + (pat.trigger.rotationIndex + 1) + (kind === 'auto' ? ' — when ' + first + ' rotates to serve' : '') }),
         el('td', { text: !pat.return ? '—'
-          : (kind === 'coach' && pat.return.rotationIndex === 0) ? 'End of trip'
+          : (kind === 'coach' && pat.return.rotationIndex === 0 && (!pat.partner || pat.partnerMode === 'split')) ? 'End of trip'
           : 'Rotation ' + (pat.return.rotationIndex + 1) + (kind === 'coach' ? ' — ' + first + ' back in' : '') })
       ]);
     }))
@@ -3505,6 +3641,7 @@ function renderLineup() {
   renderCourtView();
   renderRotationGrid();
   renderLiberoPanel();
+  renderPartnersPanel();
   renderSubPlanPanel();
   renderPairingsPanel();
   renderBench();
@@ -4009,10 +4146,27 @@ function renderSubPlanPanel() {
     const starter = byId.get(pat.out);
     if (!starter) return;
     const row = el('li', { cls: 'sub-plan-row is-coach' });
+    const ret = pat.return ? pat.return.rotationIndex : null;
+    if (pat.partner) {
+      row.classList.add('is-partner');
+      row.appendChild(el('div', { cls: 'sub-plan-who' }, [
+        el('strong', { text: tag(pat.in) }),
+        pat.partnerMode === 'split' ? ' plays rotations ' + patternRotationsText(pat) + ' for ' : ' plays the ' + pat.partnerRow + ' row for ',
+        el('strong', { text: tag(starter) })
+      ]));
+      row.appendChild(el('div', { cls: 'sub-plan-when', text: pat.partnerMode === 'split'
+        ? 'Partners \u00b7 split at rotation ' + pat.partnerAt + ' \u00b7 ' + starter.name.split(' ')[0] + ' starts the next trip'
+        : 'Partners \u00b7 rotations ' + patternRotationsText(pat) + ' \u00b7 ' + starter.name.split(' ')[0] + ' back at rotation ' + (ret + 1) }));
+      row.appendChild(el('button', {
+        cls: 'btn btn-secondary btn-tiny sub-plan-x', text: '\u2715', attrs: { 'aria-label': 'Remove this pair' }, title: 'Remove this pair',
+        on: { click: () => removePartnerPair(pat.partner) }
+      }));
+      list.appendChild(row);
+      return;
+    }
     row.appendChild(el('div', { cls: 'sub-plan-who' }, [
       el('strong', { text: tag(pat.in) }), ' in for ', el('strong', { text: tag(starter) })
     ]));
-    const ret = pat.return ? pat.return.rotationIndex : null;
     row.appendChild(el('div', { cls: 'sub-plan-when', text:
       `Your sub · from rotation ${pat.trigger.rotationIndex + 1}` + (ret === 0 || ret == null ? ' through rotation 6' : ` · ${starter.name.split(' ')[0]} back at rotation ${ret + 1}`) }));
     row.appendChild(el('button', {
@@ -4078,6 +4232,66 @@ function renderSubPlanPanel() {
   }
 
   renderSubPatternsPanel();
+}
+
+/* Partners panel: pairs of girls who share one spot. Every edit saves and
+   regenerates so the court and the sub plan follow immediately. */
+function renderPartnersPanel() {
+  const body = $('#partnersBody');
+  if (!body) return;
+  if (!Array.isArray(S.lineup.partners)) S.lineup.partners = [];
+  const pairs = S.lineup.partners;
+  const notes = S.partnerNotes || [];
+  const complete = pairs.filter(pr => pr.front && pr.back);
+  const counter = $('#partnersCounter');
+  if (counter) counter.textContent = complete.length ? String(complete.length) + (notes.length ? ' \u26a0' : '') : '';
+  body.replaceChildren();
+  const opts = [{ value: '', label: '\u2014 pick \u2014' }]
+    .concat(S.players.filter(p => (p.name || '').trim()).map(p => ({ value: p.id, label: p.name })));
+  pairs.forEach(pr => {
+    const card = el('div', { cls: 'lb-sub-card partner-card' });
+    const onPick = key => v => {
+      pr[key] = v || null;
+      if (pr.front && pr.back && pr.front === pr.back) { pr[key] = null; toast('Pick two different girls.', 2400); }
+      save();
+      renderPartnersPanel();
+      scheduleRegen();
+    };
+    const field = (label, key) => el('label', { cls: 'partner-field' }, [el('span', { text: label }), playerSelect(opts, pr[key], onPick(key))]);
+    const arrow = el('span', { cls: 'partner-swap', text: '\u21c4', attrs: { 'aria-hidden': 'true' } });
+    const del = el('button', {
+      cls: 'btn btn-secondary btn-tiny', text: '\u2715', title: 'Remove this pair', attrs: { 'aria-label': 'Remove this pair', type: 'button' },
+      on: { click: () => removePartnerPair(pr.id) }
+    });
+    const split = pr.mode === 'split';
+    const modeSel = el('select', {
+      cls: 'partner-mode', attrs: { 'aria-label': 'How they share the spot' },
+      on: { change: e => { pr.mode = e.target.value === 'split' ? 'split' : 'rows'; if (!pr.at) pr.at = 4; save(); renderPartnersPanel(); scheduleRegen(); } }
+    });
+    [['rows', 'Front row / back row'], ['split', 'Split the trip at a rotation']].forEach(([v, label]) => {
+      const o = document.createElement('option'); o.value = v; o.textContent = label; modeSel.appendChild(o);
+    });
+    modeSel.value = split ? 'split' : 'rows';
+    card.appendChild(modeSel);
+    card.appendChild(el('div', { cls: 'partner-row' }, [
+      field(split ? 'Starts' : 'Front row', 'front'), arrow, field(split ? 'Comes in' : 'Back row', 'back'), del
+    ]));
+    if (split) {
+      const atSel = el('select', {
+        attrs: { 'aria-label': 'Comes in at rotation' },
+        on: { change: e => { pr.at = parseInt(e.target.value, 10) || 4; save(); renderPartnersPanel(); scheduleRegen(); } }
+      });
+      [2, 3, 4, 5, 6].forEach(n => { const o = document.createElement('option'); o.value = String(n); o.textContent = 'rotation ' + n; atSel.appendChild(o); });
+      atSel.value = String(pr.at || 4);
+      card.appendChild(el('label', { cls: 'partner-at' }, [el('span', { text: 'Comes in at' }), atSel, el('span', { cls: 'partner-at-hint', text: 'and plays through rotation 6' })]));
+    }
+    body.appendChild(card);
+  });
+  notes.forEach(n => body.appendChild(el('p', { cls: 'partner-note', text: '\u26a0 ' + n })));
+  body.appendChild(el('button', {
+    cls: 'btn btn-secondary btn-tiny partner-add', text: '+ Add pair', attrs: { type: 'button' },
+    on: { click: () => { pairs.push({ id: 'pr_' + genId(), front: null, back: null, mode: 'rows', at: 4 }); save(); renderPartnersPanel(); } }
+  }));
 }
 
 /* Pairings panel: each entry forces both named players to start together
@@ -4851,6 +5065,7 @@ function tourSteps() {
     { tab: 'lineup', target: '#rotDots', title: 'Jump to any rotation', text: 'Tap a number to see that rotation. The amber ring marks your weakest one.' },
     { tab: 'lineup', target: '#benchCard', title: 'The bench', text: 'Drag a bench card onto a court spot. In rotation 1 that changes your starting six. In rotations 2 to 6 it is a substitution from that rotation on — drag the starter back onto her to bring her back.' },
     { tab: 'lineup', target: '.bench-item-libero', title: 'The libero', text: 'Drag her onto a starter and she covers that girl in the back row. Libero swaps are free — they never count as subs.', optional: true },
+    { tab: 'lineup', target: '#partnersPanel', title: 'Partners', text: 'Two girls who share one spot: one plays the front row and the other the back row, or split the trip at a rotation you pick. The swap is drawn into every rotation for you.', open: true },
     { tab: 'lineup', target: '#subPlanPanel', title: 'Your subs', text: 'Every sub you make shows here with a \u2715 to undo it and a running count against your 18. \u201cSetters play the front row only\u201d puts a passer in for each setter automatically.', open: true },
     { tab: 'lineup', target: '#liberoPanel', title: 'Libero settings', text: 'Who she comes in for, and which rotation she serves in. Under NFHS she serves from one spot per set.', open: true },
     { tab: 'lineup', target: '#saveLineupBtn', title: 'Save this lineup', text: 'Give it a name — “Starting six A”, “vs. Trinity”. It goes on a shelf under these buttons. Build another, then tap any card to put it back on the court exactly as you left it, subs and all.' },
@@ -5520,6 +5735,9 @@ function init() {
 
 /* runGenerate: invoke generateLineup with current state and re-render. */
 function runGenerate(opts = {}) {
+  // Partner swaps and planned subs are derived, never carried over.
+  S.lineup.subPatterns = S.lineup.subPatterns.filter(p => !p.auto && !p.partner);
+  S.partnerNotes = [];
   // Suggest (fresh) fills the board from the optimizer; otherwise the board
   // is the lineup and we just score it.
   if (opts.fresh || !S.lineup.board) {
@@ -5542,6 +5760,11 @@ function runGenerate(opts = {}) {
       .map(p => p.id);
     save();
   }
+  // Partners: their swaps follow the board. coach:true, so the court, the
+  // score card, the print sheet and the sub count all treat them as subs.
+  const partners = partnerPatterns(S);
+  S.partnerNotes = partners.notes;
+  S.lineup.subPatterns.push(...partners.patterns);
   const result = resultFromBoard(S);
   S.result = result;
   // Everybody-plays: derive the sub plan from the fresh lineup. Auto patterns

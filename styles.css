@@ -2829,3 +2829,40 @@ body.touring { overflow-x: hidden; }
 .bench-item-covered .bench-role { color: var(--brand-text); font-weight: 700; }
 .bench-item-covered .bench-name { color: var(--brand-text); }
 .bench-grip-off { color: var(--brand-text); opacity: .8; }
+
+/* ===== Partners: two girls who share one spot ===== */
+.partners-body { display: flex; flex-direction: column; }
+.partner-card { gap: 8px; margin-bottom: 8px; }
+.partner-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.partner-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.partner-field span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text-mute); }
+.partner-field select {
+  width: 100%; min-height: var(--tap);
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 15px;
+}
+.partner-field select:focus { border-color: var(--brand); outline: none; }
+.partner-swap { font-size: 20px; color: var(--brand-text); padding-bottom: 10px; }
+.partner-note { font-size: 13px; font-weight: 600; color: var(--warn); line-height: 1.4; margin-top: 6px; }
+.partner-add { margin-top: 10px; align-self: flex-start; }
+.sub-plan-row.is-partner .sub-plan-when { color: var(--brand-text); }
+@media (max-width: 479px) {
+  .partner-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .partner-swap { display: none; }
+  .partner-field { grid-column: 1; }
+  .partner-row .btn { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}
+.partner-mode {
+  align-self: flex-start;
+  background: var(--card); color: var(--brand-text);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 6px 12px; font-size: 13px; font-weight: 700; min-height: 36px;
+}
+.partner-at { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--text-soft); }
+.partner-at > span:first-child { font-weight: 700; }
+.partner-at select {
+  min-height: 40px; background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 15px;
+}
+.partner-at-hint { color: var(--text-mute); }

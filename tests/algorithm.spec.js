@@ -25,6 +25,7 @@ test.beforeEach(async ({ page }) => {
     window.S.lineup.overrides = [];
     window.S.lineup.subPatterns = [];
     window.S.lineup.pairings = [];
+    window.S.lineup.partners = [];
     window.S.lineup.liberoConfig = { playerId: null, covers: [], replaces: ['MB'], servesInRotation: null };
     window.S.lineup.planExclude = {};
     window.S.lineup.board = null;
@@ -793,5 +794,98 @@ test.describe('saved lineups', () => {
     expect(out.status).toMatchObject({ loaded: true, edited: false, gone: 0 });
     expect(out.cards).toBe(1);
     expect(out.onCourt).toBe(true);
+  });
+});
+
+test.describe('partners (front row / back row pairs)', () => {
+  // Suggest a lineup, then pair an outside starter (never covered by the
+  // libero) with a bench girl. `which` says which of the two is on the board.
+  // Returns the rotations where that starter's spot is in the back row,
+  // read off the base arrangement, so the assertions don't assume geometry.
+  const setup = (page, roster, which) => page.evaluate(([roster, which]) => {
+    window.S.players = roster;
+    window.S.settings.system = '4-2';
+    window.S.settings.level = 'ms';
+    window.S.lineup.everybodyPlays = false;
+    window.runGenerate({ fresh: true });
+    const r = window.S.result;
+    const onFloor = new Set(r.arrangement.startOrder.map(p => p.id)); onFloor.add(r.libero.player.id);
+    const bench = window.S.players.filter(p => p.available && !onFloor.has(p.id)).map(p => p.id);
+    const starter = r.arrangement.startOrder.find(p => p.positions[0] === 'OH').id;
+    window.S.lineup.partners = [
+      which === 'starterIsFront' ? { id: 'pr_t', front: starter, back: bench[0], mode: 'rows' }
+      : which === 'split' ? { id: 'pr_t', front: starter, back: bench[0], mode: 'split', at: 4 }
+      : { id: 'pr_t', front: bench[0], back: starter, mode: 'rows' }];
+    window.runGenerate();
+    const zoneIn = (rot, id) => [1, 2, 3, 4, 5, 6].find(z => { const p = window.playerAtZone(rot, z); return p && p.id === id; }) || null;
+    const backRots = [0, 1, 2, 3, 4, 5].filter(i => [1, 5, 6].includes(zoneIn(window.S.result.arrangement.rotations[i], starter)));
+    const floors = [0, 1, 2, 3, 4, 5].map(i => { const f = window.courtEffective(i); return f.frontRow.concat(f.backRow).filter(Boolean).map(p => p.id); });
+    const pat = window.coachPatterns().find(p => p.partner) || null;
+    return { starter, bench: bench[0], other: bench[1], backRots, floors,
+      pat: pat && { out: pat.out, in: pat.in.id, row: pat.partnerRow || null, mode: pat.partnerMode, at: pat.trigger.rotationIndex, back: pat.return.rotationIndex },
+      notes: window.S.partnerNotes,
+      subsUsed: window.coachPatterns().reduce((n, p) => n + (p.return ? 2 : 1), 0) };
+  }, [roster, which]);
+
+  test('the back-row partner plays the three back-row rotations and it costs two subs', async ({ page }) => {
+    const out = await setup(page, ms12, 'starterIsFront');
+    expect(out.notes).toEqual([]);
+    expect(out.pat).toMatchObject({ out: out.starter, in: out.bench, row: 'back', mode: 'rows' });
+    expect(out.backRots.length).toBe(3);
+    [0, 1, 2, 3, 4, 5].forEach(i => {
+      const back = out.backRots.includes(i);
+      expect(out.floors[i].includes(out.bench)).toBe(back);
+      expect(out.floors[i].includes(out.starter)).toBe(!back);
+    });
+    expect(out.subsUsed).toBe(2);
+  });
+
+  test('when the back-row girl is the starter, the front-row partner plays the other three', async ({ page }) => {
+    const out = await setup(page, ms12, 'starterIsBack');
+    expect(out.notes).toEqual([]);
+    expect(out.pat).toMatchObject({ out: out.starter, in: out.bench, row: 'front', mode: 'rows' });
+    [0, 1, 2, 3, 4, 5].forEach(i => {
+      const back = out.backRots.includes(i);
+      expect(out.floors[i].includes(out.bench)).toBe(!back);
+      expect(out.floors[i].includes(out.starter)).toBe(back);
+    });
+  });
+
+  test('a split pair brings the second girl in at the chosen rotation through rotation 6', async ({ page }) => {
+    const out = await setup(page, ms12, 'split');
+    expect(out.notes).toEqual([]);
+    expect(out.pat).toMatchObject({ out: out.starter, in: out.bench, mode: 'split', at: 3, back: 0 });
+    [0, 1, 2].forEach(i => { expect(out.floors[i]).toContain(out.starter); expect(out.floors[i]).not.toContain(out.bench); });
+    [3, 4, 5].forEach(i => { expect(out.floors[i]).toContain(out.bench); expect(out.floors[i]).not.toContain(out.starter); });
+    expect(out.subsUsed).toBe(2);
+  });
+
+  test('a hand sub cannot land on a partnered spot; both-on-board is a note; the pair is part of the saved card', async ({ page }) => {
+    const ids = await setup(page, ms12, 'starterIsFront');
+    const out = await page.evaluate(({ starter, bench, other }) => {
+      const zoneOf = (idx, id) => { const eff = window.courtEffective(idx); return [1, 2, 3, 4, 5, 6].find(z => { const p = window.playerAtZone(eff, z); return p && p.id === id; }) || null; };
+      // A rotation (not the first — that edits the board) where the back-row partner is on the floor.
+      const rot = [1, 2, 3, 4, 5].find(i => zoneOf(i, bench));
+      const before = JSON.stringify(window.courtEffective(rot));
+      const refused = window.coachSubDrop(rot, zoneOf(rot, bench), other);
+      const unchanged = before === JSON.stringify(window.courtEffective(rot));
+      // Both partners on the board: the pair is skipped and explained.
+      const idx = window.S.lineup.board.startOrder.findIndex(id => id !== starter);
+      window.S.lineup.board.startOrder[idx] = bench;
+      window.runGenerate();
+      const bothNotes = window.S.partnerNotes.slice();
+      const bothPats = window.coachPatterns().filter(p => p.partner).length;
+      const snap = window.lineupSnapshot(window.S);
+      const same = window.snapshotEquals(snap, { ...snap, partners: [] });
+      return { rot, refused, unchanged, bothNotes, bothPats, snapPartners: snap.partners, same };
+    }, ids);
+    expect(out.rot).not.toBeNull();
+    expect(out.refused).toBe(false);
+    expect(out.unchanged).toBe(true);
+    expect(out.bothPats).toBe(0);
+    expect(out.bothNotes.length).toBe(1);
+    expect(out.bothNotes[0]).toContain('both are starting');
+    expect(out.snapPartners.length).toBe(1);
+    expect(out.same).toBe(false);
   });
 });
