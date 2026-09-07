@@ -2682,3 +2682,71 @@ body.touring { overflow-x: hidden; }
   .court-view-bench .bench-role { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
 .tour-ring { transition-duration: .12s; }
+
+/* ===== Round 17: saved lineups shelf ===== */
+.saved-shelf { margin: 10px 0 16px; }
+.saved-shelf-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.saved-shelf-head h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .3px; color: var(--text-mute); font-weight: 700; margin: 0; }
+.saved-shelf-head .hint { font-size: 12px; margin: 0; }
+.saved-strip {
+  display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px;
+  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+}
+.saved-card {
+  flex: 0 0 auto; width: 200px; scroll-snap-align: start;
+  background: var(--card); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; cursor: pointer; box-shadow: var(--shadow-sm);
+  display: flex; flex-direction: column; gap: 6px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.saved-card:hover, .saved-card:focus-visible { border-color: var(--brand-light); box-shadow: var(--shadow); outline: none; }
+.saved-card.is-loaded { border-color: var(--brand); background: var(--brand-soft); }
+.saved-card.is-edited { border-style: dashed; }
+.saved-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.saved-card-name { font-weight: 700; font-size: 15px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.saved-badge { flex: 0 0 auto; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 2px 7px; border-radius: 999px; color: #fff; }
+.saved-badge-on { background: var(--brand); }
+.saved-badge-edited { background: var(--warn); }
+.saved-card-meta { font-size: 12px; color: var(--text-mute); }
+.saved-card-warn { font-size: 12px; color: var(--warn); font-weight: 600; }
+.saved-card-actions { display: flex; gap: 6px; margin-top: 2px; align-items: center; }
+.saved-card-actions .btn-tiny { min-height: 34px; }
+.saved-card-actions .btn-primary { flex: 1; }
+.saved-icon-btn { width: 38px; padding: 6px 0; flex: 0 0 auto; }
+.saved-card-actions .saved-icon-btn:first-child { margin-left: auto; }
+.saved-card-actions .btn-primary + .saved-icon-btn { margin-left: 0; }
+.saved-del:hover { color: var(--bad); border-color: var(--bad); }
+@media (min-width: 1024px) {
+  .saved-strip { flex-wrap: wrap; overflow: visible; }
+  .saved-card { width: 224px; }
+}
+@media (max-width: 639px) {
+  .saved-strip { margin: 0 -12px; padding: 2px 12px 8px; scroll-snap-type: x mandatory; }
+  .saved-card { width: 72vw; max-width: 260px; }
+  .saved-card-actions .btn-tiny { min-height: 40px; }
+  .saved-icon-btn { width: 44px; }
+}
+/* name dialog */
+.name-input {
+  width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; min-height: 44px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--card); color: var(--text); margin-bottom: 14px;
+}
+.name-input:focus { border-color: var(--brand); outline: none; }
+#nameModal .hint { margin-bottom: 10px; }
+/* phone: system select on its own row, then Suggest / Save / Print on one row; toast clears the tab bar */
+@media (max-width: 639px) {
+  .lineup-controls .lc-field { flex: 1 1 100%; }
+  .lineup-controls #generateBtn { flex: 2 1 130px; padding-left: 8px; padding-right: 8px; }
+  .lineup-controls #saveLineupBtn, .lineup-controls #printLineupBtn { flex: 1 1 72px; min-height: 48px; font-size: 14px; padding-left: 8px; padding-right: 8px; }
+  .toast { bottom: calc(92px + env(safe-area-inset-bottom)); max-width: 92vw; text-align: center; }
+}
+
+/* the starter the libero is in for: on the bench for the eye, not for the hand */
+.bench-item-covered {
+  cursor: default; border-style: dashed; border-color: var(--brand) !important;
+  background: rgba(var(--brand-rgb), 0.08);
+}
+.bench-item-covered .bench-role { color: var(--brand-text); font-weight: 700; }
+.bench-item-covered .bench-name { color: var(--brand-text); }
+.bench-grip-off { color: var(--brand-text); opacity: .8; }

@@ -30,6 +30,8 @@ test.beforeEach(async ({ page }) => {
     window.S.lineup.board = null;
     window.S.lineup.setterFrontOnly = false;
     window.S.lineup.everybodyPlays = true;
+    window.S.lineup.saved = [];
+    window.S.lineup.loadedSavedId = null;
     window.S.settings.levelOverrides = {};
   });
 });
@@ -662,5 +664,134 @@ test.describe('guided tour', () => {
     const missing = out.visited.filter(v => v.target && !v.hasTarget);
     expect(missing).toEqual([]);             // every spotlighted control existed
     expect(out.visited.length).toBeGreaterThanOrEqual(19);
+  });
+});
+
+test.describe('bench shows the starter the libero is in for', () => {
+  test('she is listed, highlighted, and not draggable; the count matches the floor', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster; window.S.settings.system = '4-2'; window.S.settings.level = 'ms';
+      window.S.lineup.everybodyPlays = false; window.S.lineup.subPatterns = [];
+      window.runGenerate({ fresh: true });
+      const r = window.S.result;
+      const perRot = [0,1,2,3,4,5].map(i => {
+        window.S.viewRot = i; window.renderLineup();
+        const eff = window.courtEffective(i);
+        const floor = new Set(eff.frontRow.concat(eff.backRow).filter(Boolean).map(p => p.id));
+        const offFloor = r.arrangement.startOrder.filter(p => p && !floor.has(p.id)).map(p => p.name);
+        const cards = [...document.querySelectorAll('#benchList .bench-item-covered')].map(li => ({ name: li.querySelector('.bench-name').textContent, role: li.querySelector('.bench-role').textContent }));
+        const plain = [...document.querySelectorAll('#benchList .bench-item:not(.bench-item-covered):not(.bench-item-libero) .bench-name')].map(e => e.textContent);
+        return { offFloor, cards, plain };
+      });
+      return { perRot, libero: r.libero.player.name };
+    }, ms12);
+    let covered = 0;
+    for (const rot of out.perRot) {
+      expect(rot.cards.map(c => c.name).sort()).toEqual(rot.offFloor.slice().sort());
+      for (const c of rot.cards) { expect(c.role).toContain(out.libero); expect(rot.plain).not.toContain(c.name); }
+      covered += rot.cards.length;
+    }
+    expect(covered).toBeGreaterThan(0);
+  });
+});
+
+test.describe('saved lineups', () => {
+  test('save, edit, load back, update, delete', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster; window.S.settings.system = '4-2'; window.S.settings.level = 'ms';
+      window.S.lineup.everybodyPlays = false; window.S.lineup.subPatterns = [];
+      window.runGenerate({ fresh: true });
+      const zoneOf = (idx, id) => { const e = window.courtEffective(idx); for (const z of [1,2,3,4,5,6]) { const p = window.playerAtZone(e, z); if (p && p.id === id) return z; } return null; };
+      const r = window.S.result; const onFloor = new Set(r.arrangement.startOrder.map(p => p.id)); onFloor.add(r.libero.player.id);
+      const bench = window.S.players.filter(p => !onFloor.has(p.id));
+      const A = r.arrangement.startOrder.find(p => p.positions[0] === 'OH');
+      const subOk = window.coachSubDrop(3, zoneOf(3, A.id), bench[0].id);   // a coach sub from rotation 4 on
+      const orig = window.S.lineup.board.startOrder.slice();
+      const beforeSave = window.hasUnsavedLineup();
+      const sv = window.saveLineupAs('Starting six A');
+      const afterSave = window.savedLineupStatus(sv);
+      const cards = document.querySelectorAll('#savedStrip .saved-card').length;
+      // edit the court: swap two starters, switch systems
+      window.boardSwap(0, 1, 0, 2); window.runGenerate();
+      const afterEdit = window.savedLineupStatus(sv);
+      const updateBtn = !!document.querySelector('#savedStrip .saved-card.is-edited .btn-primary');
+      window.S.settings.system = 'simple'; window.runGenerate();
+      const changed = window.S.lineup.board.startOrder.slice();
+      // bring the card back
+      window.loadSavedLineup(sv.id);
+      const back = { order: window.S.lineup.board.startOrder.slice(), system: window.S.settings.system, subs: window.coachPatterns().length, status: window.savedLineupStatus(sv), unsaved: window.hasUnsavedLineup(), rot: window.S.viewRot };
+      // edit again, then overwrite the card
+      window.boardSwap(0, 1, 0, 2); window.runGenerate();
+      const editedAgain = window.savedLineupStatus(sv).edited;
+      window.updateSavedLineup(sv.id);
+      const afterUpdate = { status: window.savedLineupStatus(sv), order: window.savedLineupById(sv.id).startOrder.slice() };
+      window.renameSavedLineup(sv.id, 'vs. Trinity');
+      const renamed = window.savedLineupById(sv.id).name;
+      window.deleteSavedLineup(sv.id);
+      return { subOk, orig, beforeSave, afterSave, cards, afterEdit, updateBtn, changed, back, editedAgain, afterUpdate, renamed, left: window.S.lineup.saved.length, loadedId: window.S.lineup.loadedSavedId, shelfHidden: document.querySelector('#savedShelf').hidden };
+    }, ms12);
+    expect(out.subOk).toBe(true);
+    expect(out.beforeSave).toBe(true);
+    expect(out.afterSave).toMatchObject({ loaded: true, edited: false, gone: 0 });
+    expect(out.cards).toBe(1);
+    expect(out.afterEdit.edited).toBe(true);
+    expect(out.updateBtn).toBe(true);
+    expect(out.changed).not.toEqual(out.orig);
+    expect(out.back.order).toEqual(out.orig);
+    expect(out.back.system).toBe('4-2');
+    expect(out.back.subs).toBe(1);
+    expect(out.back.status.edited).toBe(false);
+    expect(out.back.unsaved).toBe(false);
+    expect(out.back.rot).toBe(0);
+    expect(out.editedAgain).toBe(true);
+    expect(out.afterUpdate.status.edited).toBe(false);
+    expect(out.afterUpdate.order).not.toEqual(out.orig);
+    expect(out.renamed).toBe('vs. Trinity');
+    expect(out.left).toBe(0);
+    expect(out.loadedId).toBeNull();
+    expect(out.shelfHidden).toBe(true);
+  });
+
+  test('a card whose player left the roster still loads, with a hole and a warning', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster; window.S.settings.system = '4-2'; window.S.settings.level = 'ms';
+      window.S.lineup.everybodyPlays = false; window.S.lineup.subPatterns = [];
+      window.runGenerate({ fresh: true });
+      const sv = window.saveLineupAs('Old six');
+      const goneId = window.S.lineup.board.startOrder[2];
+      window.S.players = window.S.players.filter(p => p.id !== goneId);
+      window.S.lineup.board = null; window.runGenerate({ fresh: true });   // a different six now
+      const status = window.savedLineupStatus(sv);
+      window.loadSavedLineup(sv.id);
+      const warn = document.querySelector('#savedStrip .saved-card .saved-card-warn');
+      return { gone: status.gone, holes: window.S.result.holes, error: window.S.result.error || null, warn: warn ? warn.textContent : null };
+    }, ms12);
+    expect(out.gone).toBe(1);
+    expect(out.error).toBeNull();
+    expect(out.holes).toBe(1);
+    expect(out.warn).toContain('no longer on the roster');
+  });
+
+  test('the shelf travels in the share link', async ({ page }) => {
+    const hash = await page.evaluate((roster) => {
+      window.S.players = roster; window.S.settings.system = '4-2'; window.S.settings.level = 'ms';
+      window.S.lineup.everybodyPlays = false; window.S.lineup.subPatterns = [];
+      window.runGenerate({ fresh: true });
+      window.saveLineupAs('vs. Trinity');
+      window.save();
+      return window.encodeStateForUrl();
+    }, ms12);
+    await page.goto('/README.md');                 // leave the page so the link is a real load
+    await page.evaluate(() => localStorage.clear());
+    await page.goto('/#d=' + hash);
+    const out = await page.evaluate(() => {
+      const sv = window.S.lineup.saved[0];
+      return { n: window.S.lineup.saved.length, name: sv && sv.name, status: sv && window.savedLineupStatus(sv), cards: document.querySelectorAll('#savedStrip .saved-card').length, onCourt: !!document.querySelector('#savedStrip .saved-card.is-loaded') };
+    });
+    expect(out.n).toBe(1);
+    expect(out.name).toBe('vs. Trinity');
+    expect(out.status).toMatchObject({ loaded: true, edited: false, gone: 0 });
+    expect(out.cards).toBe(1);
+    expect(out.onCourt).toBe(true);
   });
 });

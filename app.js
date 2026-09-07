@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.06-1';
+const APP_VERSION = '2026.09.06-3';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -209,7 +209,9 @@ function defaultLineup() {
     everybodyPlays: true,
     planExclude: {},
     setterFrontOnly: false,  // 4-2 only: a passer subs in for each setter's back-row trip
-    board: null
+    board: null,
+    saved: [],               // the shelf: named snapshots of the lineup (see "Saved lineups")
+    loadedSavedId: null      // which shelf card is on the court, if any
   };
 }
 
@@ -412,7 +414,9 @@ function save(opts = {}) {
       everybodyPlays: S.lineup.everybodyPlays !== false,
       planExclude: S.lineup.planExclude || {},
       setterFrontOnly: !!S.lineup.setterFrontOnly,
-      board: S.lineup.board || null
+      board: S.lineup.board || null,
+      saved: S.lineup.saved || [],
+      loadedSavedId: S.lineup.loadedSavedId || null
     },
     scrimmage: {
       teamCount: S.scrimmage.teamCount,
@@ -578,7 +582,9 @@ function applyLoadedState(data) {
       setterFrontOnly: !!data.lineup.setterFrontOnly,
       board: (data.lineup.board && Array.isArray(data.lineup.board.startOrder) && data.lineup.board.startOrder.length === 6)
         ? { startOrder: data.lineup.board.startOrder.map(String), liberoId: typeof data.lineup.board.liberoId === 'string' ? data.lineup.board.liberoId : null }
-        : null
+        : null,
+      saved: normalizeSavedLineups(data.lineup.saved),
+      loadedSavedId: typeof data.lineup.loadedSavedId === 'string' ? data.lineup.loadedSavedId : null
     };
   }
   if (data.scrimmage && typeof data.scrimmage === 'object') {
@@ -1626,6 +1632,277 @@ function planEverybodyPlays(state, result) {
   return { patterns, subsUsed, subsCap: cap, benchLeft: bench.filter(p => !planned.has(p.id)) };
 }
 
+/* ===== Saved lineups =====
+   A saved lineup is a named snapshot of everything the coach built on the
+   Lineup tab: the six on the board, the libero and who she covers, her own
+   subs, the system, and the "setters play the front row only" switch. Only
+   player ids are stored, so a snapshot is tiny and the ratings stay on the
+   roster. The shelf travels with the team (share link), like the board. */
+function normalizeSavedLineups(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(sv => sv && typeof sv === 'object' && Array.isArray(sv.startOrder) && sv.startOrder.length === 6)
+    .map(sv => ({
+      id: (typeof sv.id === 'string' && sv.id) ? sv.id : 'sv_' + genId(),
+      name: typeof sv.name === 'string' && sv.name.trim() ? sv.name.trim().slice(0, 40) : 'Lineup',
+      savedAt: typeof sv.savedAt === 'number' ? sv.savedAt : Date.now(),
+      system: VALID_SYSTEMS.has(sv.system) ? sv.system : '4-2',
+      startOrder: sv.startOrder.map(x => (typeof x === 'string' ? x : null)),
+      liberoId: typeof sv.liberoId === 'string' ? sv.liberoId : null,
+      covers: Array.isArray(sv.covers) ? sv.covers.filter(x => typeof x === 'string') : [],
+      servesInRotation: Number.isInteger(sv.servesInRotation) ? sv.servesInRotation : null,
+      setterFrontOnly: !!sv.setterFrontOnly,
+      subs: Array.isArray(sv.subs)
+        ? sv.subs.filter(x => x && typeof x.out === 'string' && typeof x.in === 'string')
+            .map(x => ({ out: x.out, in: x.in, at: Number.isInteger(x.at) ? x.at : 1, back: Number.isInteger(x.back) ? x.back : 0 }))
+        : []
+    }));
+}
+
+/* lineupSnapshot: what is on the court right now, in saved-lineup form.
+   null until there is a board. */
+function lineupSnapshot(state) {
+  state = state || S;
+  const board = state.lineup && state.lineup.board;
+  if (!board || !Array.isArray(board.startOrder) || board.startOrder.length !== 6) return null;
+  const cfg = state.lineup.liberoConfig || {};
+  return {
+    system: state.settings.system,
+    startOrder: board.startOrder.slice(),
+    liberoId: cfg.playerId || board.liberoId || null,
+    covers: (cfg.covers || []).slice(),
+    servesInRotation: Number.isInteger(cfg.servesInRotation) ? cfg.servesInRotation : null,
+    setterFrontOnly: !!state.lineup.setterFrontOnly,
+    subs: coachPatterns(state).map(pt => ({
+      out: pt.out, in: pt.in.id,
+      at: pt.trigger.rotationIndex,
+      back: (pt.return && Number.isInteger(pt.return.rotationIndex)) ? pt.return.rotationIndex : 0
+    }))
+  };
+}
+
+function _savedSubKey(x) { return [x.out, x.in, x.at, x.back].join('|'); }
+function snapshotEquals(a, b) {
+  if (!a || !b) return false;
+  if (a.system !== b.system) return false;
+  if ((a.liberoId || null) !== (b.liberoId || null)) return false;
+  if (!!a.setterFrontOnly !== !!b.setterFrontOnly) return false;
+  if ((Number.isInteger(a.servesInRotation) ? a.servesInRotation : null) !== (Number.isInteger(b.servesInRotation) ? b.servesInRotation : null)) return false;
+  if (a.startOrder.join(',') !== b.startOrder.join(',')) return false;
+  if (a.covers.slice().sort().join(',') !== b.covers.slice().sort().join(',')) return false;
+  return a.subs.map(_savedSubKey).sort().join(';') === b.subs.map(_savedSubKey).sort().join(';');
+}
+
+function savedLineupById(id) {
+  return (S.lineup.saved || []).find(sv => sv.id === id) || null;
+}
+
+/* savedLineupStatus: how a shelf card relates to the roster and the court.
+   loaded  — this card is the one on the court
+   edited  — loaded, and the court has drifted from what the card holds
+   gone    — players in the card who are no longer on the roster
+   out     — names of players in the card who are marked unavailable */
+function savedLineupStatus(sv, state) {
+  state = state || S;
+  const byId = new Map(state.players.map(pl => [pl.id, pl]));
+  const ids = sv.startOrder.concat(sv.liberoId ? [sv.liberoId] : [], sv.subs.map(x => x.in));
+  let gone = 0; const out = [];
+  ids.forEach(id => {
+    if (!id) return;
+    const pl = byId.get(id);
+    if (!pl) gone++;
+    else if (!pl.available && !out.includes(pl.name)) out.push(pl.name);
+  });
+  const loaded = state.lineup.loadedSavedId === sv.id;
+  const edited = loaded && !snapshotEquals(lineupSnapshot(state), sv);
+  return { loaded, edited, gone, out };
+}
+
+/* hasUnsavedLineup: the court holds something no shelf card matches. */
+function hasUnsavedLineup(state) {
+  state = state || S;
+  const cur = lineupSnapshot(state);
+  if (!cur) return false;
+  return !(state.lineup.saved || []).some(sv => snapshotEquals(cur, sv));
+}
+
+function defaultSavedName() {
+  const names = new Set((S.lineup.saved || []).map(sv => sv.name));
+  let n = (S.lineup.saved || []).length + 1;
+  while (names.has('Lineup ' + n)) n++;
+  return 'Lineup ' + n;
+}
+
+function saveLineupAs(name) {
+  const snap = lineupSnapshot(S);
+  if (!snap) return null;
+  const sv = { id: 'sv_' + genId(), name: (name || '').trim().slice(0, 40) || defaultSavedName(), savedAt: Date.now(), ...snap };
+  S.lineup.saved = (S.lineup.saved || []).concat([sv]);
+  S.lineup.loadedSavedId = sv.id;
+  save();
+  renderSavedShelf();
+  return sv;
+}
+
+function updateSavedLineup(id) {
+  const sv = savedLineupById(id);
+  const snap = lineupSnapshot(S);
+  if (!sv || !snap) return false;
+  Object.assign(sv, snap, { savedAt: Date.now() });
+  S.lineup.loadedSavedId = sv.id;
+  save();
+  renderSavedShelf();
+  return true;
+}
+
+function renameSavedLineup(id, name) {
+  const sv = savedLineupById(id);
+  const n = (name || '').trim().slice(0, 40);
+  if (!sv || !n) return false;
+  sv.name = n;
+  save();
+  renderSavedShelf();
+  return true;
+}
+
+function deleteSavedLineup(id) {
+  const before = (S.lineup.saved || []).length;
+  S.lineup.saved = (S.lineup.saved || []).filter(sv => sv.id !== id);
+  if (S.lineup.saved.length === before) return false;
+  if (S.lineup.loadedSavedId === id) S.lineup.loadedSavedId = null;
+  save();
+  renderSavedShelf();
+  return true;
+}
+
+/* loadSavedLineup: put a shelf card on the court. Everything it holds
+   replaces what is there — board, libero, coach subs, system. A player who
+   has left the roster leaves a hole (resultFromBoard reports it); a sub
+   whose player is gone is dropped. */
+function loadSavedLineup(id) {
+  const sv = savedLineupById(id);
+  if (!sv) return false;
+  const byId = new Map(S.players.map(pl => [pl.id, pl]));
+  if (VALID_SYSTEMS.has(sv.system)) S.settings.system = sv.system;
+  $$('#systemSelect, #systemSelectLineup').forEach(sel => { sel.value = S.settings.system; });
+  S.lineup.board = { startOrder: sv.startOrder.slice(), liberoId: sv.liberoId || null };
+  const cfg = S.lineup.liberoConfig || defaultLineup().liberoConfig;
+  S.lineup.liberoConfig = { ...cfg, playerId: sv.liberoId || null, covers: sv.covers.slice(), servesInRotation: sv.servesInRotation };
+  S.lineup.setterFrontOnly = !!sv.setterFrontOnly;
+  S.lineup.subPatterns = (S.lineup.subPatterns || []).filter(pt => pt && !pt.coach && !pt.auto).concat(
+    sv.subs.map(x => byId.has(x.in) ? {
+      id: 'coach_' + genId(), out: x.out, in: byId.get(x.in),
+      trigger: { rotationIndex: x.at, event: 'in' },
+      return: { rotationIndex: x.back, event: 'in' },
+      coach: true
+    } : null).filter(Boolean));
+  S.lineup.loadedSavedId = sv.id;
+  S.viewRot = 0;
+  save();
+  runGenerate();
+  return true;
+}
+
+const SYSTEM_SHORT = { '4-2': '4-2', simple: 'Simple 6', '5-1': '5-1', '6-2': '6-2' };
+function _savedDate(ts) {
+  try { return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (_) { return ''; }
+}
+
+/* renderSavedShelf: the strip of cards under the Lineup buttons. Hidden
+   until something is saved — the Save button is the invitation. */
+function renderSavedShelf() {
+  const shelf = $('#savedShelf');
+  const strip = $('#savedStrip');
+  const saveBtn = $('#saveLineupBtn');
+  const list = S.lineup.saved || [];
+  if (saveBtn) saveBtn.hidden = !lineupSnapshot(S);
+  if (!shelf || !strip) return;
+  shelf.hidden = !list.length;
+  strip.replaceChildren();
+  list.forEach(sv => {
+    const st = savedLineupStatus(sv);
+    const card = el('div', {
+      cls: 'saved-card' + (st.loaded ? ' is-loaded' : '') + (st.edited ? ' is-edited' : ''),
+      attrs: { role: 'button', tabindex: '0', 'data-saved-id': sv.id },
+      title: st.loaded && !st.edited ? 'On the court now' : 'Tap to put this lineup on the court'
+    });
+    const top = el('div', { cls: 'saved-card-top' });
+    top.appendChild(el('span', { cls: 'saved-card-name', text: sv.name }));
+    if (st.loaded) top.appendChild(el('span', { cls: 'saved-badge ' + (st.edited ? 'saved-badge-edited' : 'saved-badge-on'), text: st.edited ? 'Edited' : 'On court' }));
+    card.appendChild(top);
+    const nSubs = sv.subs.length;
+    card.appendChild(el('div', { cls: 'saved-card-meta', text: [SYSTEM_SHORT[sv.system] || sv.system, nSubs ? `${nSubs} sub${nSubs === 1 ? '' : 's'}` : 'no subs', _savedDate(sv.savedAt)].filter(Boolean).join(' · ') }));
+    if (st.gone || st.out.length) {
+      const warn = st.gone ? `${st.gone} player${st.gone === 1 ? '' : 's'} no longer on the roster` : `${st.out.join(', ')} out`;
+      card.appendChild(el('div', { cls: 'saved-card-warn', text: '⚠ ' + warn }));
+    }
+    const actions = el('div', { cls: 'saved-card-actions' });
+    if (st.edited) {
+      const u = el('button', { cls: 'btn btn-primary btn-tiny', text: 'Update', attrs: { type: 'button' }, title: 'Save what is on the court into this lineup' });
+      u.addEventListener('click', e => { e.stopPropagation(); updateSavedLineup(sv.id); toast(`Updated “${sv.name}”.`, 2200); });
+      actions.appendChild(u);
+    }
+    const rn = el('button', { cls: 'btn btn-secondary btn-tiny saved-icon-btn', text: '✎', attrs: { type: 'button', 'aria-label': 'Rename' }, title: 'Rename' });
+    rn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const n = await nameDialog('Rename lineup', sv.name, 'Rename', '');
+      if (n) renameSavedLineup(sv.id, n);
+    });
+    const del = el('button', { cls: 'btn btn-secondary btn-tiny saved-icon-btn saved-del', text: '✕', attrs: { type: 'button', 'aria-label': 'Delete' }, title: 'Delete' });
+    del.addEventListener('click', async e => {
+      e.stopPropagation();
+      const ok = await confirmDialog('Delete saved lineup?', `Remove “${sv.name}” from the shelf? The court does not change.`);
+      if (ok) { deleteSavedLineup(sv.id); toast(`Deleted “${sv.name}”.`, 2000); }
+    });
+    actions.appendChild(rn);
+    actions.appendChild(del);
+    card.appendChild(actions);
+    const go = async () => {
+      if (st.loaded && !st.edited) { toast(`“${sv.name}” is already on the court.`, 2000); return; }
+      if (hasUnsavedLineup()) {
+        const ok = await confirmDialog('Replace the lineup on the court?', `What is on the court now is not saved. Put “${sv.name}” on the court anyway?`);
+        if (!ok) return;
+      }
+      loadSavedLineup(sv.id);
+      toast(`“${sv.name}” is on the court.`, 2400);
+    };
+    card.addEventListener('click', go);
+    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    strip.appendChild(card);
+  });
+}
+
+/* nameDialog: ask for a short name. Resolves to the string, or null on cancel. */
+function nameDialog(title, initial, okLabel, hint) {
+  return new Promise(resolve => {
+    const m = $('#nameModal');
+    const input = $('#nameInput');
+    const ok = $('#nameOk');
+    const cancel = $('#nameCancel');
+    const hintEl = $('#nameHint');
+    if (!m || !input || !ok || !cancel) { resolve(null); return; }
+    $('#nameTitle').textContent = title;
+    ok.textContent = okLabel || 'Save';
+    if (hintEl) { hintEl.textContent = hint || ''; hintEl.hidden = !hint; }
+    input.value = initial || '';
+    m.hidden = false;
+    setTimeout(() => { input.focus(); input.select(); }, 30);
+    function cleanup(v) {
+      m.hidden = true;
+      ok.removeEventListener('click', okH);
+      cancel.removeEventListener('click', cancelH);
+      input.removeEventListener('keydown', keyH);
+      resolve(v);
+    }
+    function okH() { cleanup(input.value.trim() || null); }
+    function cancelH() { cleanup(null); }
+    function keyH(e) { if (e.key === 'Enter') { e.preventDefault(); okH(); } else if (e.key === 'Escape') { e.preventDefault(); cancelH(); } }
+    ok.addEventListener('click', okH);
+    cancel.addEventListener('click', cancelH);
+    input.addEventListener('keydown', keyH);
+  });
+}
+
 /* ===== The board =====
    resultFromBoard: score a coach-owned lineup. Same result shape as
    generateLineup so every renderer, the sub plan, print and the bench tab
@@ -2348,6 +2625,20 @@ if (typeof window !== 'undefined') {
   window.courtEffective = courtEffective;
   window.playerAtZone = playerAtZone;
   window.runGenerate = runGenerate;
+  window.boardSwap = boardSwap;
+  window.coachPatterns = coachPatterns;
+  window.save = save;
+  window.encodeStateForUrl = encodeStateForUrl;
+  window.lineupSnapshot = lineupSnapshot;
+  window.snapshotEquals = snapshotEquals;
+  window.saveLineupAs = saveLineupAs;
+  window.updateSavedLineup = updateSavedLineup;
+  window.renameSavedLineup = renameSavedLineup;
+  window.deleteSavedLineup = deleteSavedLineup;
+  window.loadSavedLineup = loadSavedLineup;
+  window.savedLineupById = savedLineupById;
+  window.savedLineupStatus = savedLineupStatus;
+  window.hasUnsavedLineup = hasUnsavedLineup;
   window.resolveLiberoServeRot = resolveLiberoServeRot;
   window.effectiveRotationWithLibero = effectiveRotationWithLibero;
   window.canSub = canSub;
@@ -3182,6 +3473,7 @@ function renderLineup() {
   const r = S.result;
   const wrap = $('#lineupResult');
   const status = $('#lineupStatus');
+  renderSavedShelf();
   if (!r) {
     wrap.hidden = true;
     if (status) status.textContent = '';
@@ -3982,6 +4274,31 @@ function renderBench() {
       el('span', { cls: 'bench-stat-pill', text: playerSkillRaw(libP).toFixed(1), title: 'Average of the six skills' })
     ]);
     ul.appendChild(li);
+    // The starter she is in for this rotation is off the floor too. She is not
+    // a bench player (she comes back on her own when she rotates to the front
+    // row), but the coach should see where she went — so list her, highlighted,
+    // and not draggable.
+    const eff = courtEffective(idx);
+    if (eff) {
+      const floorIds = new Set(eff.frontRow.concat(eff.backRow).filter(Boolean).map(p => p.id));
+      const six = new Map((r.arrangement ? r.arrangement.startOrder : []).filter(Boolean).map(p => [p.id, p]));
+      coachPatterns().filter(pt => _patternActiveAt(pt, idx)).forEach(pt => { six.delete(pt.out); six.set(pt.in.id, pt.in); });
+      six.forEach(p => {
+        if (floorIds.has(p.id) || p.id === libP.id) return;
+        const role = (p.positions && p.positions[0]) || '';
+        ul.appendChild(el('li', {
+          cls: `bench-item bench-item-covered rot-chip-${role || 'ANY'}`,
+          attrs: { title: `${libP.name} is in for her this rotation. She comes back on her own when she rotates to the front row.`, 'aria-disabled': 'true' }
+        }, [
+          el('span', { cls: 'bench-grip bench-grip-off', text: '⇄', attrs: { 'aria-hidden': 'true' } }),
+          el('span', { cls: 'bench-main' }, [
+            el('span', { cls: 'bench-name', text: p.name || '?' }),
+            el('span', { cls: 'bench-role', text: `Sitting for ${libP.name} · back row` })
+          ]),
+          el('span', { cls: 'bench-stat-pill', text: playerSkillRaw(p).toFixed(1), title: 'Average of the six skills' })
+        ]));
+      });
+    }
   }
   if (benchPlayers.length === 0 && !libP) {
     ul.appendChild(el('li', { cls: 'bench-empty', text: 'No bench — every available player is starting.' }));
@@ -4528,6 +4845,9 @@ function tourSteps() {
     { tab: 'lineup', target: '.bench-item-libero', title: 'The libero', text: 'Drag her onto a starter and she covers that girl in the back row. Libero swaps are free — they never count as subs.', optional: true },
     { tab: 'lineup', target: '#subPlanPanel', title: 'Your subs', text: 'Every sub you make shows here with a \u2715 to undo it and a running count against your 18. \u201cSetters play the front row only\u201d puts a passer in for each setter automatically.', open: true },
     { tab: 'lineup', target: '#liberoPanel', title: 'Libero settings', text: 'Who she comes in for, and which rotation she serves in. Under NFHS she serves from one spot per set.', open: true },
+    { tab: 'lineup', target: '#saveLineupBtn', title: 'Save this lineup', text: 'Give it a name — “Starting six A”, “vs. Trinity”. It goes on a shelf under these buttons. Build another, then tap any card to put it back on the court exactly as you left it, subs and all.' },
+    { tab: 'lineup', target: '#savedStrip .saved-card', title: 'The shelf', text: 'Each card is a whole lineup. The one on the court says On court. Change anything and it says Edited, with an Update button to overwrite it. ✎ renames, ✕ deletes. Tap any other card to put it on the court.', optional: true },
+    { tab: 'lineup', target: '.bench-item-covered', title: 'Where did she go?', text: 'When the libero is in for a starter, that starter shows here, highlighted. She is not subbed out — she comes back on her own when she rotates to the front row.', optional: true },
     { tab: 'lineup', target: '#printLineupBtn', title: 'Print', text: 'Prints all six rotations and your subs — exactly what you built, nothing added.' },
     { tab: 'lineup', target: '#shareBtn', title: 'Share', text: 'Your whole team travels in one link. Tap to copy it and text it to your assistant. Whoever shares last has the latest version.' },
     { center: true, last: true, title: 'That\u2019s the whole app', text: 'Tap Tutorial in the top bar any time to run this again. The Guide tab has the rules cheat-sheet.' }
@@ -4903,6 +5223,19 @@ function init() {
 
   $('#printRosterBtn')?.addEventListener('click', printRoster);
   $('#printLineupBtn')?.addEventListener('click', printLineup);
+  $('#saveLineupBtn')?.addEventListener('click', async () => {
+    if (!lineupSnapshot(S)) return;
+    const loaded = savedLineupById(S.lineup.loadedSavedId);
+    const st = loaded ? savedLineupStatus(loaded) : null;
+    if (st && st.loaded && !st.edited) { toast(`This lineup is already saved as “${loaded.name}”.`, 2600); return; }
+    const hint = (st && st.edited)
+      ? `This saves a new card. To overwrite “${loaded.name}” instead, tap Update on its card.`
+      : 'Something you will recognize later — “Starting six A”, “vs. Trinity”.';
+    const name = await nameDialog('Save this lineup', defaultSavedName(), 'Save', hint);
+    if (name === null) return;
+    const sv = saveLineupAs(name);
+    if (sv) toast(`Saved “${sv.name}”. Tap it on the shelf any time to bring it back.`, 3200);
+  });
 
   // Topbar settings: ruleset / system / jersey toggle / setter-tempo toggle
   const levelSel = $('#levelSelect');
@@ -5145,6 +5478,7 @@ function init() {
   renderWeights();
   applyLevelGates();
   if (S.lineup.board) runGenerate(); // the coach's lineup is there when she opens the app
+  renderSavedShelf();
   updateCounts();
   updateLastEditedDisplay();
   // Restore the last-active tab (persisted in S.currentTab); falls back to

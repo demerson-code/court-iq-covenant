@@ -871,6 +871,19 @@ Could not reproduce: pointer-event drags (rotation-1 swap, rotation-3 sub) then 
 - [x] **Guide tab**: start button, six one-paragraph cards, NFHS cheat-sheet.
 - [x] **Phone pass** (≤639px): tabs docked to the bottom with safe-area padding, compact topbar, court zones sized for 375px with wrapping names, compact score card, two-column bench (no horizontal scroll, so drags never fight a swipe), tour card docked above the tab bar.
 
+## Round 17 — saved lineups (2026-09-06)
+
+Derek: "I would like to add the ability to 'save' a rotation. Create the new 'starting six', save key rotations in the future." Grilled to: save the **whole lineup** (starting six, libero coverage, coach subs, system, setters-front-only), as **named cards on a shelf** under the Lineup buttons, on iPad, phone and desktop.
+
+- [x] **State**: `S.lineup.saved = [{ id, name, savedAt, system, startOrder, liberoId, covers, servesInRotation, setterFrontOnly, subs:[{out,in,at,back}] }]` + `S.lineup.loadedSavedId`. Ids only — ratings stay on the roster. Travels in the share link like the board.
+- [x] **Functions** (all on `window`): `lineupSnapshot`, `snapshotEquals`, `saveLineupAs`, `updateSavedLineup`, `renameSavedLineup`, `deleteSavedLineup`, `loadSavedLineup` (sets system, board, libero, coach subs, viewRot 0, then `runGenerate`), `savedLineupStatus` (loaded / edited / gone / out), `hasUnsavedLineup`.
+- [x] **UI**: 💾 Save button next to Print (hidden until there is a board) → name dialog (`#nameModal`, `nameDialog()`); shelf `#savedShelf` hidden until the first save. Card: name, "On court" / "Edited" badge, system · subs · date, ⚠ when a player left the roster or is out, Update (only when edited), ✎ rename, ✕ delete (confirm). Tapping a card when the court is unsaved asks first.
+- [x] **Layout**: horizontal snap strip on phone (72vw cards, edge-bleed) and iPad; wraps on ≥1024px. Phone button row: system select full width, then Suggest / Save / Print on one row; toast lifted above the tab bar.
+- [x] Tour steps "Save this lineup", "The shelf" (optional — shown when a card exists) and "Where did she go?" (optional — the covered starter) before Print; Guide card 6 (Print and share becomes 7). 24 steps.
+- [x] **Bench shows the starter the libero is in for** (Derek: "Ellie is missing from the bench"): `.bench-item-covered` — highlighted, dashed, "Sitting for Emilia · back row", not draggable (she is not subbed out; she returns on her own in the front row). Per viewed rotation, after coach subs.
+- [x] Tests: save/edit/load/update/rename/delete; missing-player card loads with a hole + warning; shelf round-trips through the share link; covered-starter bench card matches the floor in all six rotations. 41 total.
+- Deferred: print all saved lineups at once; copy a lineup between teams.
+
 ## Parallel Execution Map
 
 ```

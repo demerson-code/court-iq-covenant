@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Court IQ">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
   <title>Court IQ — Covenant</title>
-  <link rel="stylesheet" href="styles.css?v=2026.09.06-1">
+  <link rel="stylesheet" href="styles.css?v=2026.09.06-3">
 </head>
 <body>
   <header class="topbar">
@@ -120,9 +120,18 @@
             </select>
           </label>
           <button class="btn btn-primary" id="generateBtn">⚡ Suggest lineup</button>
+          <button class="btn btn-secondary btn-tiny" id="saveLineupBtn" hidden type="button" title="Save this lineup to the shelf">💾 Save</button>
           <button class="btn btn-secondary btn-tiny" id="printLineupBtn" hidden type="button" title="Print this lineup chart">🖨 Print</button>
         </div>
         <div class="lineup-status" id="lineupStatus"></div>
+
+        <section class="saved-shelf" id="savedShelf" hidden aria-label="Saved lineups">
+          <div class="saved-shelf-head">
+            <h3>Saved lineups</h3>
+            <span class="hint">Tap one to put it on the court.</span>
+          </div>
+          <div class="saved-strip" id="savedStrip"></div>
+        </section>
 
         <div id="lineupResult" hidden>
           <section class="court-view" id="courtView">
@@ -298,7 +307,11 @@
           <p>She's always on the bench. Drag her onto a starter and she covers that girl in the back row — free, no sub used. The Libero panel shows who she's in for and where she serves.</p>
         </section>
         <section class="guide-card">
-          <h3>6 · Print and share</h3>
+          <h3>6 · Save lineups you like</h3>
+          <p>Tap <strong>💾 Save</strong> and name it — "Starting six A", "vs. Trinity". It goes on the shelf under the buttons with your subs, libero, and system inside. Build another, then tap any card to put it back on the court. If you change a loaded lineup, its card shows <strong>Update</strong>.</p>
+        </section>
+        <section class="guide-card">
+          <h3>7 · Print and share</h3>
           <p><strong>Print</strong> gives you all six rotations and your subs on one sheet. The <strong>🔗</strong> button copies a link that carries your whole team — text it to your assistant; whoever shares last has the latest.</p>
         </section>
       </div>
@@ -418,6 +431,18 @@
   <div id="printSheet" aria-hidden="true"></div>
 
   <!-- Confirm modal -->
+  <div class="modal" id="nameModal" hidden>
+    <div class="modal-content">
+      <h3 id="nameTitle">Save this lineup</h3>
+      <p class="hint" id="nameHint"></p>
+      <input class="name-input" id="nameInput" type="text" maxlength="40" autocomplete="off" autocapitalize="words" placeholder="Lineup name">
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="nameCancel" type="button">Cancel</button>
+        <button class="btn btn-primary" id="nameOk" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="confirmModal" hidden>
     <div class="modal-content">
       <h3 id="confirmTitle">Are you sure?</h3>
@@ -429,6 +454,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2026.09.06-1"></script>
+  <script src="app.js?v=2026.09.06-3"></script>
 </body>
 </html>

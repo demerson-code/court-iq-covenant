@@ -19,4 +19,4 @@ npm test   # Playwright algorithm tests
 
 ## Sharing
 
-The share link (🔗 in the top bar) carries the whole team — roster, ratings, settings, lineup. Whoever shares the latest link is the source of truth. Theme, tonight's scrimmage attendance, and in-match bench state stay on the device and never travel with the link.
+The share link (🔗 in the top bar) carries the whole team — roster, ratings, settings, lineup, and the shelf of saved lineups. Whoever shares the latest link is the source of truth. Theme, tonight's scrimmage attendance, and in-match bench state stay on the device and never travel with the link.

@@ -145,7 +145,7 @@ Beyond those:
 ## Block status
 
 - Live on GitHub Pages since 2026-09-05 (public repo demerson-code/court-iq-covenant,
-  Pages from main / root). 36 Playwright tests. See `PLAN.md` for the
+  Pages from main / root). 41 Playwright tests. See `PLAN.md` for the
   round-by-round history after the coach's first look.
 - Pending: real Covenant logo/colors (placeholder navy + "C" mark in place),
   iPad device check, the coach's league sub cap.
@@ -176,6 +176,18 @@ big court, rotation dots + Rotate, a score card, and the bench full-width
 below. The six-card grid lives under the collapsed "All six rotations" panel. The Bench tab is hidden unless
 `settings.showBench` (Advanced) — the coaches run scenarios at home, not at
 the game.
+
+## Saved lineups (the shelf)
+
+`S.lineup.saved` is a list of named snapshots — ids only (`startOrder`,
+`liberoId`, `covers`, coach `subs` as `{out,in,at,back}`, `system`,
+`setterFrontOnly`, `servesInRotation`). `lineupSnapshot()` builds one from
+the court; `snapshotEquals()` decides the "Edited" badge; `loadSavedLineup()`
+is the only way a card reaches the court (it rewrites board + libero + coach
+subs + system, then `runGenerate`). `S.lineup.loadedSavedId` marks the card on
+the court. Both travel in the share link. `renderSavedShelf()` runs inside
+`renderLineup()` so every drag refreshes the badges. Names come from
+`nameDialog()` (`#nameModal`), never `window.prompt`.
 
 ## Bench / match state
 
