@@ -5,18 +5,24 @@
    preference when the user hasn't chosen — so both directions win. Keep the
    two dark blocks identical. */
 :root {
-  /* Brand — placeholders until Covenant colors arrive (Block 3 swaps these lines) */
-  --brand: #1F3A5F; --brand-dark: #14263F; --brand-light: #3D5F8F; --brand-soft: #E3EAF3;
-  --brand-rgb: 31, 58, 95;
+  /* Brand — The Covenant School. Navy + red are the seal colors, pulled from
+     covenantschoolwv.org (#0B233F / #B22A2E / #E7ECF2). Navy does the work;
+     red is an accent (active tab, topbar rule, motto) so it stays special. */
+  --brand: #0B233F; --brand-dark: #061629; --brand-light: #2B4A75; --brand-soft: #E7ECF2;
+  --brand-rgb: 11, 35, 63;
+  --accent: #B22A2E; --accent-dark: #8E1F23; --accent-soft: #F8E9EA; --accent-rgb: 178, 42, 46;
+  /* Display face: the school site sets headings in Baskerville. Self-hosted
+     (CSP is self-only); Baskerville is built into iPadOS as the fallback. */
+  --font-display: "Libre Baskerville", Baskerville, "Baskervville", Georgia, "Times New Roman", serif;
   /* Back-compat aliases — older rules still say --green* */
   --green: var(--brand); --green-dark: var(--brand-dark); --green-light: var(--brand-light); --green-soft: var(--brand-soft);
-  --court-navy: #1E2A3A; --court-deep: #121A26; --court-line: #FFFFFF;
+  --court-navy: #143457; --court-deep: #0B233F; --court-line: #FFFFFF;
   --bg: #F4F6F9; --card: #FFFFFF;
   --text: #17202B; --text-mute: #5B6878; --text-soft: #3E4B5B;
   --border: #D7DEE7; --border-soft: #E8EDF3;
   --overlay: rgba(0,0,0,.06); --overlay-strong: rgba(0,0,0,.12);
   --on-brand: #FFFFFF;
-  --brand-text: #14263F;      /* brand-colored text on cards; flips light in dark mode */
+  --brand-text: #0B233F;      /* brand-colored text on cards; flips light in dark mode */
   --good: #1E9E4F; --warn: #C98A00; --bad: #C93B3B;
   --role-S: #6D28D9; --role-OPP: #B45309; --role-OH: #0369A1; --role-MB: #B91C1C; --role-L: var(--brand-dark); --role-DS: #475569;
   --shadow-sm: 0 1px 2px rgba(16,24,40,.06); --shadow: 0 4px 12px rgba(16,24,40,.08); --shadow-lg: 0 12px 32px rgba(16,24,40,.12);
@@ -24,13 +30,15 @@
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --brand-light: #6F93C4; --brand-soft: #1C2B42;
+  --brand-light: #7FA1D2; --brand-soft: #16263D;
+  --accent: #D9484D; --accent-dark: #B22A2E; --accent-soft: #3A1B1E;
+  --brand: #2F5688; --brand-dark: #234571; --brand-rgb: 47, 86, 136; /* fills need to read on the dark ground; the topbar keeps seal navy */
   --court-navy: #0F1A2E; --court-deep: #060B17;
   --bg: #0E1726; --card: #15202E;
   --text: #F5FAF7; --text-mute: #9DB1A6; --text-soft: #BCD3C5;
   --border: #1F3346; --border-soft: #182838;
   --overlay: rgba(255,255,255,.06); --overlay-strong: rgba(255,255,255,.12);
-  --brand-text: #B7CBEA;
+  --brand-text: #BCCFEC;
   --good: #2CC960; --warn: #F5B82E; --bad: #E04A4A;
   --role-S: #C4B5FD; --role-OPP: #FCD34D; --role-OH: #7DD3FC; --role-MB: #FCA5A5; --role-L: var(--brand-light); --role-DS: #CBD5E1;
   --shadow-sm: 0 1px 3px rgba(0,0,0,.18); --shadow: 0 4px 14px rgba(0,0,0,.22); --shadow-lg: 0 10px 32px rgba(0,0,0,.32);
@@ -38,18 +46,35 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --brand-light: #6F93C4; --brand-soft: #1C2B42;
+    --brand-light: #7FA1D2; --brand-soft: #16263D;
+    --accent: #D9484D; --accent-dark: #B22A2E; --accent-soft: #3A1B1E;
+    --brand: #2F5688; --brand-dark: #234571; --brand-rgb: 47, 86, 136; /* fills need to read on the dark ground; the topbar keeps seal navy */
     --court-navy: #0F1A2E; --court-deep: #060B17;
     --bg: #0E1726; --card: #15202E;
     --text: #F5FAF7; --text-mute: #9DB1A6; --text-soft: #BCD3C5;
     --border: #1F3346; --border-soft: #182838;
     --overlay: rgba(255,255,255,.06); --overlay-strong: rgba(255,255,255,.12);
-  --brand-text: #B7CBEA;
+  --brand-text: #BCCFEC;
     --good: #2CC960; --warn: #F5B82E; --bad: #E04A4A;
     --role-S: #C4B5FD; --role-OPP: #FCD34D; --role-OH: #7DD3FC; --role-MB: #FCA5A5; --role-L: var(--brand-light); --role-DS: #CBD5E1;
     --shadow-sm: 0 1px 3px rgba(0,0,0,.18); --shadow: 0 4px 14px rgba(0,0,0,.22); --shadow-lg: 0 10px 32px rgba(0,0,0,.32);
     color-scheme: dark;
   }
+}
+
+@font-face {
+  font-family: "Libre Baskerville";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("assets/fonts/libre-baskerville.woff2") format("woff2");
+}
+/* Serif is reserved for the few "title" moments; everything the coach reads
+   fast (chips, tables, buttons) stays in the system sans. */
+.brand, .section-header h2, .guide-hero h2, .print-header h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 * { box-sizing: border-box; }
@@ -78,13 +103,13 @@ p { margin: 0; }
   position: sticky;
   top: 0;
   z-index: 50;
-  background: linear-gradient(135deg, var(--green) 0%, var(--green-dark) 100%);
+  background: linear-gradient(135deg, #0B233F 0%, #061629 100%); /* seal navy, both themes */
   color: white;
   padding: 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: var(--shadow);
+  box-shadow: inset 0 -3px 0 var(--accent), var(--shadow);
 }
 .topbar-row {
   display: flex;
@@ -136,7 +161,7 @@ p { margin: 0; }
 .brand-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   flex-shrink: 0;
 }
 .ball {
@@ -144,10 +169,19 @@ p { margin: 0; }
   filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2));
 }
 .brand {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
+  font-size: 17px;
+  line-height: 1.15;
   white-space: nowrap;
+}
+.brand-app {
+  display: block;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  opacity: 0.78;
+  margin-bottom: 1px;
 }
 .brand-team-name {
   border-bottom: 1px dashed rgba(255,255,255,0.4);
@@ -208,7 +242,7 @@ p { margin: 0; }
   background: var(--card);
   border-bottom: 1px solid var(--border);
   position: sticky;
-  top: 100px;
+  top: var(--topbar-h, 100px); /* set from the topbar's rendered height in init() */
   z-index: 40;
 }
 .tab {
@@ -230,9 +264,9 @@ p { margin: 0; }
 }
 .tab-icon { font-size: 18px; line-height: 1; opacity: 0.85; }
 .tab.active {
-  color: var(--green-light);
-  border-bottom-color: var(--green);
-  background: rgba(var(--brand-rgb), 0.08);
+  color: var(--brand-text);
+  border-bottom-color: var(--accent);
+  background: rgba(var(--brand-rgb), 0.06);
 }
 .tab.active .tab-icon { opacity: 1; }
 .tab:hover { background: rgba(var(--brand-rgb), 0.10); }
@@ -331,7 +365,7 @@ main {
 .btn-primary {
   background: var(--green);
   color: white;
-  box-shadow: 0 2px 6px rgba(255,77,139,0.3);
+  box-shadow: 0 2px 6px rgba(var(--brand-rgb),0.28);
 }
 .btn-primary:hover { background: var(--green-dark); }
 
@@ -675,7 +709,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 6px rgba(255,77,139,0.3);
+  box-shadow: 0 2px 6px rgba(var(--brand-rgb),0.28);
   transition: transform 0.1s;
 }
 .rot-btn:hover { background: var(--green-dark); }
@@ -1494,11 +1528,11 @@ body.dragging-court .bench-drop-zone { display: block; }
   content: '';
   position: absolute;
   inset: 0;
-  background-image: url('assets/covenant-logo.svg');
+  background-image: url('assets/covenant-seal.png');
   background-position: center;
   background-repeat: no-repeat;
-  background-size: 120px auto;
-  opacity: .08;
+  background-size: 170px auto;
+  opacity: .07;
   pointer-events: none;
 }
 .empty-state > * { position: relative; }
@@ -2100,19 +2134,36 @@ body.dragging-court .bench-drop-zone { display: block; }
     print-color-adjust: exact;
   }
   .print-header {
-    border-bottom: 2pt solid #000;
-    padding-bottom: 6pt;
-    margin-bottom: 12pt;
+    display: flex;
+    align-items: center;
+    gap: 10pt;
+    position: relative;
+    border-bottom: 2.5pt solid #0B233F;
+    padding-bottom: 7pt;
+    margin-bottom: 14pt;
   }
+  .print-header::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -5pt;
+    height: 1pt;
+    background: #B22A2E;
+  }
+  .print-seal { width: 0.62in; height: 0.62in; flex-shrink: 0; }
+  .print-header-text { min-width: 0; }
   .print-header h1 {
     font-size: 18pt;
-    font-weight: 800;
     margin: 0 0 2pt;
-    letter-spacing: -0.2pt;
+    color: #0B233F;
   }
   .print-meta {
     font-size: 10pt;
     color: #444;
+  }
+  .print-coaches {
+    font-size: 9.5pt;
+    color: #0B233F;
+    margin-top: 1pt;
   }
 
   /* Roster table */
@@ -2242,7 +2293,31 @@ body.dragging-court .bench-drop-zone { display: block; }
 .help-btn-topbar:hover { background: rgba(255,255,255,0.2); }
 
 /* ===== Block 3: brand, tablet, landscape iPad ===== */
-.brand-logo { width: 32px; height: 32px; flex-shrink: 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)); }
+.brand-logo {
+  width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.92), 0 2px 5px rgba(0,0,0,0.28);
+}
+/* Coaches, right end of the settings row. Hidden on phones (bottom-tab layout
+   already spends the vertical room); still on the Guide tab and the print sheet. */
+.topbar-coaches {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  color: rgba(255,255,255,0.95);
+  font-size: 12px;
+  font-weight: 600;
+}
+.topbar-coaches-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+@media (max-width: 639px) { .topbar-coaches { display: none; } }
 #lineupSide { display: flex; flex-direction: column; gap: 12px; }
 
 @media (min-width: 768px) {
@@ -2461,7 +2536,7 @@ body.dragging-court .bench-drop-zone { display: block; }
 .rot-chip-ANY { border-left: 3px solid var(--text-mute); }
 @media (min-width: 768px) {
   .court-view { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
-  .court-view-side { position: sticky; top: 160px; }
+  /* Not sticky: the bench spans the same grid below, so a pinned card slid over it. */
 }
 @media (min-width: 1024px) {
   .court-view { grid-template-columns: minmax(0, 1fr) 340px; }
@@ -2610,7 +2685,11 @@ body.touring { overflow-x: hidden; }
 
 /* ===== Guide tab ===== */
 .guide-hero { text-align: center; padding: 8px 8px 20px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-.guide-hero h2 { font-size: 22px; }
+.guide-hero h2 { font-size: 24px; color: var(--brand-text); }
+.guide-seal { width: 88px; height: 88px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px #fff, var(--shadow); margin-bottom: 4px; }
+.guide-motto { font-family: var(--font-display); font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-top: -6px; }
+.guide-coaches { font-size: 14px; color: var(--text-soft); }
+.guide-coaches strong { color: var(--brand-text); }
 .guide-hero .btn { min-height: 52px; font-size: 16px; }
 .guide-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 640px) { .guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -2636,7 +2715,7 @@ body.touring { overflow-x: hidden; }
     box-shadow: 0 -4px 14px rgba(16,24,40,.08);
   }
   .tab { padding: 8px 2px 6px; font-size: 11px; min-height: 58px; border-bottom: none; border-top: 3px solid transparent; }
-  .tab.active { border-top-color: var(--brand); }
+  .tab.active { border-top-color: var(--accent); }
   .tab-icon { font-size: 20px; }
   body { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
   main { padding: 12px; }

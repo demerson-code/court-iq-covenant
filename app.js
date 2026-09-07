@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.06-3';
+const APP_VERSION = '2026.09.06-4';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -164,6 +164,9 @@ const THEME_KEY = 'court_iq_covenant_theme'; // 'light' | 'dark' | null (= follo
 
 /* ===== State ===== */
 const DEFAULT_TEAM_NAME = 'Covenant Middle School';
+// Shown in the topbar, the Guide tab, and on every print sheet. Not part of
+// the share link — it's the program, not the team snapshot.
+const TEAM_COACHES = ['Mackenzie Moir', 'Abbie Wayne'];
 
 function defaultSettings() {
   return {
@@ -2698,6 +2701,18 @@ function loadDemoRoster() {
    names safe by construction). The sheet is display:none on screen and only
    revealed inside @media print when body.printing is active. */
 
+/* Print header: seal, team name, one meta line, coaches. Used by both sheets. */
+function buildPrintHeaderDOM(teamName, meta) {
+  return el('header', { cls: 'print-header' }, [
+    el('img', { cls: 'print-seal', attrs: { src: 'assets/covenant-seal.png', alt: '' } }),
+    el('div', { cls: 'print-header-text' }, [
+      el('h1', { text: teamName }),
+      el('div', { cls: 'print-meta', text: meta }),
+      el('div', { cls: 'print-coaches', text: 'Coaches: ' + TEAM_COACHES.join(' & ') })
+    ])
+  ]);
+}
+
 function buildPrintRosterDOM() {
   const teamName = S.teamName || DEFAULT_TEAM_NAME;
   const date = new Date().toLocaleDateString();
@@ -2705,12 +2720,8 @@ function buildPrintRosterDOM() {
   const sorted = S.players.slice().sort((a, b) => playerSkillRaw(b) - playerSkillRaw(a));
 
   const page = el('div', { cls: 'print-page' });
-  const header = el('header', { cls: 'print-header' }, [
-    el('h1', { text: 'Court IQ — ' + teamName }),
-    el('div', { cls: 'print-meta', text:
-      'Roster · ' + currentLevel().label + ' · ' + date + ' · ' + avail + ' of ' + S.players.length + ' available' })
-  ]);
-  page.appendChild(header);
+  page.appendChild(buildPrintHeaderDOM(teamName,
+    'Roster · ' + currentLevel().label + ' · ' + date + ' · ' + avail + ' of ' + S.players.length + ' available'));
 
   const hs = isHS();
   const table = el('table', { cls: 'print-roster' });
@@ -2762,11 +2773,8 @@ function buildPrintLineupDOM() {
   const liberoNote = lib ? ' · Libero: ' + (lib.name || '—') : '';
 
   const page = el('div', { cls: 'print-page' });
-  page.appendChild(el('header', { cls: 'print-header' }, [
-    el('h1', { text: 'Court IQ — ' + teamName }),
-    el('div', { cls: 'print-meta', text:
-      'Lineup · ' + date + ' · System ' + sys + (isHS() ? ' · ' + modeLabel : '') + liberoNote })
-  ]));
+  page.appendChild(buildPrintHeaderDOM(teamName,
+    'Lineup · ' + date + ' · System ' + sys + (isHS() ? ' · ' + modeLabel : '') + liberoNote));
 
   const level = currentLevel();
   const patterns = S.lineup.subPatterns || [];
@@ -5163,7 +5171,19 @@ function init() {
   initTheme();
   const loadResult = load();
 
-  // Editable team name in the topbar brand. The "Court IQ — " prefix is
+  // Coaches are a program fact (TEAM_COACHES), written into the topbar and
+  // the Guide hero here and into the print header when a sheet is built.
+  $$('[data-coaches]').forEach(n => { n.textContent = TEAM_COACHES.join(' & '); });
+
+  // Sticky tabs sit exactly under the topbar, whatever height it renders at.
+  const topbarEl = document.querySelector('.topbar');
+  if (topbarEl && 'ResizeObserver' in window) {
+    const setTopbarH = () => document.documentElement.style.setProperty('--topbar-h', topbarEl.offsetHeight + 'px');
+    new ResizeObserver(setTopbarH).observe(topbarEl);
+    setTopbarH();
+  }
+
+  // Editable team name in the topbar brand. The "Court IQ" eyebrow is
   // fixed; only the team-name span is contenteditable. Commit on blur or
   // Enter; Escape reverts. Empty string falls back to the default.
   const teamNameEl = $('#teamNameDisplay');

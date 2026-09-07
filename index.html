@@ -4,21 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:; connect-src 'self';">
-  <meta name="theme-color" content="#1F3A5F">
+  <meta name="theme-color" content="#0B233F">
   <meta name="description" content="Court IQ — volleyball lineup and sub planner for The Covenant School.">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Court IQ">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
   <title>Court IQ — Covenant</title>
-  <link rel="stylesheet" href="styles.css?v=2026.09.06-3">
+  <link rel="stylesheet" href="styles.css?v=2026.09.06-4">
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-row">
       <div class="brand-row">
-        <img class="brand-logo" src="assets/covenant-logo.svg" alt="" width="32" height="32">
-        <h1 class="brand">Court IQ — <span
+        <img class="brand-logo" src="assets/covenant-seal.png" alt="The Covenant School seal" width="40" height="40">
+        <h1 class="brand"><span class="brand-app">Court IQ</span><span
           class="brand-team-name"
           id="teamNameDisplay"
           contenteditable="true"
@@ -49,6 +50,7 @@
           <option value="6-2" data-system="6-2">6-2</option>
         </select>
       </label>
+      <div class="topbar-coaches"><span class="topbar-coaches-label">Coaches</span><span data-coaches>Mackenzie Moir &amp; Abbie Wayne</span></div>
     </div>
   </header>
 
@@ -280,7 +282,10 @@
     <!-- GUIDE TAB -->
     <section class="tab-panel" id="guideTab" role="tabpanel">
       <div class="guide-hero">
+        <img class="guide-seal" src="assets/covenant-seal.png" alt="The Covenant School seal" width="88" height="88">
         <h2>How to use Court IQ</h2>
+        <p class="guide-motto">Veritas · Decor · Virtus</p>
+        <p class="guide-coaches">Coaches <strong data-coaches>Mackenzie Moir &amp; Abbie Wayne</strong></p>
         <p class="hint">The fastest way to learn it is the tour — it walks you through every button on your own roster.</p>
         <button class="btn btn-primary" id="guideTourBtn" type="button">🎓 Start the two-minute tour</button>
       </div>
@@ -454,6 +459,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2026.09.06-3"></script>
+  <script src="app.js?v=2026.09.06-4"></script>
 </body>
 </html>

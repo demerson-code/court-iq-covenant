@@ -6,6 +6,8 @@ A volleyball lineup and sub planner built for The Covenant School's middle schoo
 
 Forked from [Court IQ College](https://github.com/demerson-code/court-iq-college). One HTML file, one CSS file, one JS file — no build step, no dependencies, deploys from `main`.
 
+Branded for The Covenant School: the seal, its navy and red, and Baskerville headings, matching [covenantschoolwv.org](https://covenantschoolwv.org). Coaches: Mackenzie Moir and Abbie Wayne.
+
 ## Local development
 
 ```sh

@@ -139,16 +139,25 @@ Beyond those:
   put it first.
 - The user reviews local preview before pushing. Don't push without explicit
   approval.
-- Covenant logo and colors come from the user. Until they arrive, brand
-  tokens are navy placeholders in `styles.css`.
+- **Branding is in (2026-09-06).** Seal navy `#0B233F` and seal red
+  `#B22A2E` from covenantschoolwv.org drive `--brand` / `--accent` in
+  `styles.css`; red is an accent only (active tab, topbar rule, motto).
+  The seal is `assets/covenant-seal.png` (topbar, Guide hero, print header,
+  empty-state watermark); `assets/icon-180.png` and `assets/favicon-32.png`
+  are derived from it. Headings use self-hosted Libre Baskerville
+  (`assets/fonts/`, one variable-weight file; CSP is self-only so no Google
+  Fonts). The topbar is pinned to seal navy in both themes; dark mode lifts
+  `--brand` to a lighter navy so filled buttons stay readable.
+- Coaches (Mackenzie Moir, Abbie Wayne) live in `TEAM_COACHES` in `app.js`
+  and are written into every `[data-coaches]` element at init, plus the
+  print header. They are program facts, not team state — not in the link.
 
 ## Block status
 
 - Live on GitHub Pages since 2026-09-05 (public repo demerson-code/court-iq-covenant,
   Pages from main / root). 41 Playwright tests. See `PLAN.md` for the
   round-by-round history after the coach's first look.
-- Pending: real Covenant logo/colors (placeholder navy + "C" mark in place),
-  iPad device check, the coach's league sub cap.
+- Pending: iPad device check, the coach's league sub cap.
 
 ## Libero
 
