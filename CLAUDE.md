@@ -159,6 +159,18 @@ Beyond those:
   round-by-round history after the coach's first look.
 - Pending: iPad device check, the coach's league sub cap.
 
+## Court tab (scratch six)
+
+`S.court = { startOrder: [6 ids|null], viewRot }` — a scratch court for
+trying rotations. **Local only** (persisted like `match`, never in the share
+link). The Lineup tab's court view, score card and bench are drawn through a
+context object (`LINEUP_CTX` / `COURT_CTX`: container ids + which state to
+read); `refreshScratch()` builds a throwaway state with the scratch six, no
+subs, no partners and NO libero (Derek's call — she is an ordinary player
+there), and `S.courtState` caches it. Drags carry `scratch:true` and route to `scratchDrop()`: every
+drop edits the six in any rotation, court→bench empties the spot. Nothing on
+this tab writes to `S.lineup`.
+
 ## Partners (front row / back row pairs)
 
 `S.lineup.partners = [{ id, front, back, mode: 'rows' | 'split', at }]`.

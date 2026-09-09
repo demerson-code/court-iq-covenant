@@ -156,7 +156,7 @@ const safeStorage = (() => {
 // Bump on every change that ships. Shown in the topbar tooltip and the print
 // footer, and used to cache-bust app.js / styles.css in index.html — so
 // "which version am I running?" is never a guess.
-const APP_VERSION = '2026.09.07-1';
+const APP_VERSION = '2026.09.09-1';
 
 const STORAGE_KEY = 'court_iq_covenant_v1';
 const LEGACY_KEY = null; // no prior tool on a Covenant coach's device — nothing to migrate
@@ -297,10 +297,11 @@ let S = {
   lastEdited: null,
   rosterSort: 'avg-desc',   // 'avg-desc' | 'avg-asc' | 'name-asc' | 'name-desc'
   benchSort: 'avg-desc',
+  court: null,               // Court tab scratch six — this device only, never in the link
   currentTab: 'roster'      // last-active tab; restored on reload
 };
 
-const VALID_TABS = new Set(['roster', 'lineup', 'scrimmage', 'guide', 'bench']);
+const VALID_TABS = new Set(['roster', 'court', 'lineup', 'scrimmage', 'guide', 'bench']);
 const VALID_SYSTEMS = new Set(['4-2', 'simple', '5-1', '6-2']); // keep in step with SYSTEM_REQUIREMENTS
 
 const SORT_MODES = new Set(['avg-desc', 'avg-asc', 'name-asc', 'name-desc']);
@@ -438,6 +439,7 @@ function save(opts = {}) {
     match: S.match,
     lastEdited: S.lastEdited,
     rosterSort: S.rosterSort,
+    court: S.court || null,
     benchSort: S.benchSort
   };
   safeStorage.set(STORAGE_KEY, JSON.stringify(payload));
@@ -474,7 +476,8 @@ function load() {
         localOnly = {
           currentTab: VALID_TABS.has(data.currentTab) ? data.currentTab : null,
           scrimmage: (data.scrimmage && typeof data.scrimmage === 'object') ? data.scrimmage : null,
-          match: (data.match && typeof data.match === 'object') ? data.match : null
+          match: (data.match && typeof data.match === 'object') ? data.match : null,
+          court: normalizeCourt(data.court)
         };
       }
     }
@@ -503,6 +506,7 @@ function load() {
     if (localOnly) {
       if (localOnly.currentTab) S.currentTab = localOnly.currentTab;
       if (localOnly.match) S.match = normalizeMatch(localOnly.match);
+      if (localOnly.court) S.court = localOnly.court;
       if (localOnly.scrimmage) {
         S.scrimmage = {
           ...S.scrimmage,
@@ -613,6 +617,7 @@ function applyLoadedState(data) {
     };
   }
   if (data.match && typeof data.match === 'object') S.match = normalizeMatch(data.match);
+  S.court = normalizeCourt(data.court);
   if (typeof data.lastEdited === 'number') S.lastEdited = data.lastEdited;
   if (SORT_MODES.has(data.rosterSort)) S.rosterSort = data.rosterSort;
   if (SORT_MODES.has(data.benchSort)) S.benchSort = data.benchSort;
@@ -2764,6 +2769,11 @@ if (typeof window !== 'undefined') {
   window.runGenerate = runGenerate;
   window.boardSwap = boardSwap;
   window.coachPatterns = coachPatterns;
+  window.boardSlot = boardSlot;
+  window.setTab = setTab;
+  window.renderCourtTab = renderCourtTab;
+  window.refreshScratch = refreshScratch;
+  window.scratchDrop = scratchDrop;
   window.partnerPatterns = partnerPatterns;
   window.partnerPatternFor = partnerPatternFor;
   window.save = save;
@@ -3055,7 +3065,7 @@ function onDragStart(opts, e) {
    rest — so the rule shows itself before the drop, not after. */
 function markLegalSpots(opts) {
   clearLegalSpots();
-  if (!opts || opts.kind !== 'bench' || !S.result || !S.result.arrangement) return;
+  if (!opts || opts.scratch || opts.kind !== 'bench' || !S.result || !S.result.arrangement) return;
   const idx = (((S.viewRot || 0) % 6) + 6) % 6;
   if (idx === 0) return; // rotation 1 is the starting six — anything goes
   const pat = coachPatterns().find(pt => pt.out === opts.playerId && _patternActiveAt(pt, idx));
@@ -3149,11 +3159,11 @@ function findDropTarget(x, y) {
         return { kind: 'zone', rotIdx, zone, el: zoneEl };
       }
     }
-    if (e.id === 'benchCard' || e.id === 'benchList' || e.classList?.contains('bench-list')) {
-      return { kind: 'bench', el: document.getElementById('benchCard') };
-    }
-    if (e.tagName === 'LI' && e.parentElement?.id === 'benchList') {
-      return { kind: 'bench', el: document.getElementById('benchCard') };
+    // Either bench card — the Lineup tab's or the Court tab's. Only one is
+    // on screen at a time, so the ghost can only hover the right one.
+    const benchEl = e.classList?.contains('bench-card') ? e : (e.closest && e.closest('.bench-card'));
+    if (benchEl && (benchEl.id === 'benchCard' || benchEl.id === 'scratchBenchCard')) {
+      return { kind: 'bench', el: benchEl };
     }
     // Team cards (Scrimmage tab). A drop on a specific team-player is a swap;
     // a drop on the card body is a move.
@@ -3220,6 +3230,7 @@ function performDrop(source, target) {
     return;
   }
 
+  if (source.scratch) { scratchDrop(source, target); return; }
   if (!S.result || !S.lineup.board) return;
 
   // Rotation 1 is the starting six. Any later rotation: a drag is a substitution.
@@ -3648,6 +3659,94 @@ function renderLineup() {
   updateClearOverridesBtn();
 }
 
+/* ===== Court contexts =====
+   The same court view (rotation dots, big court, score card, bench) is
+   drawn in two places: on the Lineup tab against the real lineup, and on
+   the Court tab against a scratch six that never touches it. A context
+   says which containers to draw into and which state to read. */
+const LINEUP_CTX = {
+  scratch: false,
+  ids: { court: '#bigCourt', dots: '#rotDots', card: '#scoreCard', hint: '#courtHint', bench: '#benchList' },
+  state: () => S,
+  getRot: () => S.viewRot || 0,
+  setRot: v => { S.viewRot = v; }
+};
+const COURT_CTX = {
+  scratch: true,
+  ids: { court: '#scratchCourt', dots: '#scratchDots', card: '#scratchScore', hint: '#scratchHint', bench: '#scratchBenchList' },
+  state: () => S.courtState || refreshScratch(),
+  getRot: () => (S.court && S.court.viewRot) || 0,
+  setRot: v => { if (S.court) S.court.viewRot = v; }
+};
+
+function normalizeCourt(c) {
+  if (!c || !Array.isArray(c.startOrder) || c.startOrder.length !== 6) return null;
+  return {
+    startOrder: c.startOrder.map(x => (typeof x === 'string' ? x : null)),
+    viewRot: Number.isInteger(c.viewRot) ? ((c.viewRot % 6) + 6) % 6 : 0
+  };
+}
+/* The scratch court starts as a copy of the Lineup six, or empty. */
+function defaultCourt() {
+  return {
+    startOrder: (S.lineup.board && Array.isArray(S.lineup.board.startOrder)) ? S.lineup.board.startOrder.slice() : [null, null, null, null, null, null],
+    viewRot: 0
+  };
+}
+/* refreshScratch: score the scratch six exactly like the lineup — same
+   system and weights — but with no subs, no partners and no libero: on this
+   tab she is an ordinary player. Returns a throwaway state the shared
+   renderers read through COURT_CTX. */
+function refreshScratch() {
+  if (!S.court) S.court = defaultCourt();
+  const cfg = S.lineup.liberoConfig || {};
+  const byId = new Map(S.players.map(p => [p.id, p]));
+  const startOrder = S.court.startOrder.map(id => (id && byId.has(id)) ? id : null);
+  const st = {
+    ...S,
+    lineup: { ...S.lineup, board: { startOrder, liberoId: null }, subPatterns: [], partners: [], liberoConfig: { ...cfg, playerId: null, covers: [] } },
+    result: null
+  };
+  st.result = resultFromBoard(st);
+  S.courtState = st;
+  return st;
+}
+function renderCourtTab() {
+  const st = refreshScratch();
+  const status = $('#scratchStatus');
+  if (status) {
+    const holes = (st.result && st.result.holes) || 0;
+    const empty = S.court.startOrder.every(x => !x);
+    status.textContent = empty ? 'Drag six players from the bench onto the court, or start from your Lineup six.'
+      : holes ? `${holes} empty spot${holes > 1 ? 's' : ''} — drag a bench player on.` : '';
+    status.hidden = !status.textContent;
+  }
+  renderCourtView(COURT_CTX);
+}
+/* scratchDrop: drags on the Court tab. Every drop edits the scratch six no
+   matter which rotation is showing — there are no subs here. */
+function scratchDrop(source, target) {
+  if (!S.court) S.court = defaultCourt();
+  const c = S.court;
+  if (target.kind === 'zone') {
+    const slot = boardSlot(target.rotIdx, target.zone);
+    if (source.kind === 'bench') {
+      const already = c.startOrder.indexOf(source.playerId);
+      if (already === slot) return;
+      if (already >= 0) c.startOrder[already] = c.startOrder[slot];
+      c.startOrder[slot] = source.playerId;
+    } else if (source.kind === 'court') {
+      const from = boardSlot(source.rotIdx, source.zone);
+      if (from === slot) return;
+      const tmp = c.startOrder[slot]; c.startOrder[slot] = c.startOrder[from]; c.startOrder[from] = tmp;
+    } else return;
+  } else if (target.kind === 'bench' && source.kind === 'court') {
+    c.startOrder[boardSlot(source.rotIdx, source.zone)] = null;
+  } else return;
+  save();
+  renderCourtTab();
+}
+
 /* ===== Court view =====
    One rotation at a time, big enough to read from the bench, with the
    floor's strength by category beside it. Shows starters + libero only —
@@ -3667,14 +3766,15 @@ const COURT_CATEGORIES = [
   ['serving', 'Serving'], ['defense', 'Defense'], ['blocking', 'Blocking']
 ];
 
-function renderCourtView() {
-  const court = $('#bigCourt'), dots = $('#rotDots'), card = $('#scoreCard');
+function renderCourtView(ctx = LINEUP_CTX) {
+  const court = $(ctx.ids.court), dots = $(ctx.ids.dots), card = $(ctx.ids.card);
   if (!court || !dots || !card) return;
   court.replaceChildren(); dots.replaceChildren(); card.replaceChildren();
-  const r = S.result;
+  const st = ctx.state();
+  const r = st.result;
   if (!r || !r.arrangement) return;
-  const idx = (((S.viewRot || 0) % 6) + 6) % 6;
-  S.viewRot = idx;
+  const idx = (((ctx.getRot() || 0) % 6) + 6) % 6;
+  ctx.setRot(idx);
   const level = currentLevel();
   const scores = r.perRotationScores;
   const min = Math.min.apply(null, scores), max = Math.max.apply(null, scores);
@@ -3686,13 +3786,13 @@ function renderCourtView() {
       attrs: { type: 'button', 'aria-label': `Rotation ${i + 1}` },
       title: `Rotation ${i + 1}: ${scores[i].toFixed(1)}`,
       text: String(i + 1),
-      on: { click: () => { S.viewRot = i; renderCourtView(); } }
+      on: { click: () => { ctx.setRot(i); renderCourtView(ctx); } }
     }));
   }
 
-  const eff = courtEffective(idx);
-  const preLibero = applySubPatterns(r.arrangement.rotations[idx], coachPatterns(), idx);
-  const coachIn = new Set(coachPatterns().filter(pt => _patternActiveAt(pt, idx)).map(pt => pt.in.id));
+  const eff = courtEffective(idx, st);
+  const preLibero = applySubPatterns(r.arrangement.rotations[idx], coachPatterns(st), idx);
+  const coachIn = new Set(coachPatterns(st).filter(pt => _patternActiveAt(pt, idx)).map(pt => pt.in.id));
   const grid = el('div', { cls: 'rot-court big-rot-court' });
   for (const z of [4, 3, 2, 5, 6, 1]) {
     const player = playerAtZone(eff, z);
@@ -3702,7 +3802,7 @@ function renderCourtView() {
     if (isLibero) cellCls.push('rot-zone-libero');
     const zoneLabel = el('span', { cls: 'rot-zone-num', text: `${z} · ${POSITION_NAMES[z]}` });
     const covered = isLibero ? playerAtZone(preLibero, z) : null;
-    const chip = buildPlayerChip(player, idx, z, !!(player && coachIn.has(player.id)), true, covered ? covered.name : null);
+    const chip = buildPlayerChip(player, idx, z, !!(player && coachIn.has(player.id)), true, covered ? covered.name : null, ctx);
     grid.appendChild(el('div', { cls: cellCls.join(' '), dataset: { rotIdx: String(idx), zone: String(z) } }, [zoneLabel, chip]));
   }
   court.appendChild(grid);
@@ -3738,10 +3838,13 @@ function renderCourtView() {
   ]));
   card.appendChild(el('p', { cls: 'hint score-hint', text: 'Numbers are the six on the floor, averaged (1–10).' }));
 
-  const hint = $('#courtHint');
+  const hint = $(ctx.ids.hint);
   if (hint) {
     hint.replaceChildren();
-    if (idx === 0) {
+    if (ctx.scratch) {
+      hint.appendChild(el('strong', { text: 'Scratch court. ' }));
+      hint.appendChild(document.createTextNode('Drag players in and out — every drag changes the six here, in any rotation. Drag a player to the bench to open her spot. Nothing here touches your Lineup tab.'));
+    } else if (idx === 0) {
       hint.appendChild(el('strong', { text: 'Rotation 1 is your starting six. ' }));
       hint.appendChild(document.createTextNode('Drag a bench player onto a spot to put her in, or drag two players on the court to swap them. Tap Rotate to walk through the set.'));
     } else {
@@ -3749,7 +3852,7 @@ function renderCourtView() {
       hint.appendChild(document.createTextNode('Drag a bench player onto a spot and she comes in for that player from this rotation on. Drag the starter back onto her (or drag the sub to the bench) to bring the starter back. Each one counts against your subs.'));
     }
   }
-  renderBench();
+  renderBench(ctx);
 }
 
 function updateClearOverridesBtn() {
@@ -3872,7 +3975,7 @@ function isZoneOverridden(rotIdx, zone) {
   return (S.lineup.overrides || []).some(o => o.rotationIndex === rotIdx && o.zone === zone);
 }
 
-function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false, coveredName = null) {
+function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false, coveredName = null, ctx = null) {
   if (!player) {
     return el('div', { cls: 'rot-chip rot-chip-empty', text: '—' });
   }
@@ -3884,12 +3987,13 @@ function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false, 
   const chipName = (S.settings?.showJersey && player.jersey) ? `#${player.jersey} ${firstName}` : firstName;
   // "Outside · playing Middle" — 4-2 needs two middles even when the roster
   // has none, and the coach should see who's filling in where.
-  const assigned = S.result && S.result.roleOf && S.result.roleOf[player.id];
+  const res = ctx ? ctx.state().result : S.result;
+  const assigned = res && res.roleOf && res.roleOf[player.id];
   const roleText = isSub ? 'SUB'
     : coveredName ? `Libero · in for ${coveredName}`
     : (assigned && assigned !== role && assigned !== 'L') ? `${roleLabel(role)} · playing ${roleLabel(assigned)}`
     : roleLabel(assigned || role);
-  const isLiberoChip = !!(S.result && S.result.libero && S.result.libero.player && S.result.libero.player.id === player.id);
+  const isLiberoChip = !!(res && res.libero && res.libero.player && res.libero.player.id === player.id);
   const chip = el('div', {
     cls: cls.join(' ') + (isLiberoChip ? ' rot-chip-libero' : ''),
     dataset: { playerId: player.id, rotIdx: String(rotIdx), zone: String(zone) },
@@ -3897,7 +4001,7 @@ function buildPlayerChip(player, rotIdx, zone, isSub = false, fullName = false, 
     on: {
       pointerdown: e => {
         if (isLiberoChip) return; // the libero isn't a spot on the board
-        onDragStart({ kind: 'court', playerId: player.id, rotIdx, zone }, e);
+        onDragStart({ kind: 'court', playerId: player.id, rotIdx, zone, scratch: !!(ctx && ctx.scratch) }, e);
       }
     }
   }, [
@@ -4456,19 +4560,20 @@ function renderLineupBreakdown() {
   wrap.appendChild(why);
 }
 
-function renderBench() {
-  const ul = $('#benchList');
+function renderBench(ctx = LINEUP_CTX) {
+  const ul = $(ctx.ids.bench);
   if (!ul) return;
   ul.replaceChildren();
-  const r = S.result;
+  const st = ctx.state();
+  const r = st.result;
   if (!r || r.error) return;
   // The bench is "who is not on the floor in the rotation you're looking at",
   // so a starter you subbed out shows up here and can be dragged back.
   // A starter the libero is covering is not "on the bench" — she's part of the
   // libero swap — so start from the six on the board, then apply coach subs.
-  const idx = (((S.viewRot || 0) % 6) + 6) % 6;
+  const idx = (((ctx.getRot() || 0) % 6) + 6) % 6;
   const onFloor = new Set((r.arrangement ? r.arrangement.startOrder : []).filter(Boolean).map(p => p.id));
-  coachPatterns().filter(pt => _patternActiveAt(pt, idx)).forEach(pt => { onFloor.delete(pt.out); onFloor.add(pt.in.id); });
+  coachPatterns(st).filter(pt => _patternActiveAt(pt, idx)).forEach(pt => { onFloor.delete(pt.out); onFloor.add(pt.in.id); });
   const libP = r.libero && r.libero.player;
   if (libP) onFloor.add(libP.id);
   const benchPlayers = S.players
@@ -4500,11 +4605,11 @@ function renderBench() {
     // a bench player (she comes back on her own when she rotates to the front
     // row), but the coach should see where she went — so list her, highlighted,
     // and not draggable.
-    const eff = courtEffective(idx);
+    const eff = courtEffective(idx, st);
     if (eff) {
       const floorIds = new Set(eff.frontRow.concat(eff.backRow).filter(Boolean).map(p => p.id));
       const six = new Map((r.arrangement ? r.arrangement.startOrder : []).filter(Boolean).map(p => [p.id, p]));
-      coachPatterns().filter(pt => _patternActiveAt(pt, idx)).forEach(pt => { six.delete(pt.out); six.set(pt.in.id, pt.in); });
+      coachPatterns(st).filter(pt => _patternActiveAt(pt, idx)).forEach(pt => { six.delete(pt.out); six.set(pt.in.id, pt.in); });
       six.forEach(p => {
         if (floorIds.has(p.id) || p.id === libP.id) return;
         const role = (p.positions && p.positions[0]) || '';
@@ -4533,7 +4638,7 @@ function renderBench() {
       cls: `bench-item rot-chip-${role || 'ANY'}`,
       attrs: { title: 'Drag onto a court spot to put her there' },
       on: {
-        pointerdown: e => onDragStart({ kind: 'bench', playerId: player.id }, e)
+        pointerdown: e => onDragStart({ kind: 'bench', playerId: player.id, scratch: ctx.scratch }, e)
       }
     }, [
       el('span', { cls: 'bench-grip', text: '⋮⋮', attrs: { 'aria-hidden': 'true' } }),
@@ -5050,7 +5155,7 @@ function tourSteps() {
   const genIdx = 9; // index of the Suggest step — lineup steps after it need a result
   return [
     { center: true, title: 'Welcome to Court IQ', text: 'This walks you through the app in about two minutes: rate your players, build a starting six, rotate, sub, print, and share. Nothing you do in the tour is permanent — you can change anything afterwards.' },
-    { tab: 'roster', target: '.tabs', title: 'The tabs', text: 'Roster is your team. Lineup is where you build the six and plan subs. Scrimmage splits the team into even practice sides. Guide has this tour and a rules cheat-sheet.' },
+    { tab: 'roster', target: '.tabs', title: 'The tabs', text: 'Roster is your team. Court is a scratch court for trying rotations. Lineup is where you build the real six and plan subs. Scrimmage splits the team into even practice sides. Guide has this tour and a rules cheat-sheet.' },
     { tab: 'roster', target: '#addPlayerBtn', title: 'Add players', text: 'One card per girl. Tap here to add one.', ensureRoster: true },
     { tab: 'roster', target: '.player-card', title: 'A player card', text: 'Tap a name to open her card. Everything about her lives here.', expandFirst: true },
     { tab: 'roster', target: '.player-card.expanded .skill-grid', title: 'Rate the six skills', text: 'Serve, receive (passing), defense, hit, block, set — 1 to 10. Rate against your own team: a 7 means one of your better ones. The AVG badge updates as you type.' },
@@ -5327,6 +5432,7 @@ function setTab(name) {
   $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === name + 'Tab'));
   document.body.dataset.tab = name; // lets CSS widen main only where the layout wants it
   if (name === 'scrimmage') renderScrimmage();
+  if (name === 'court') renderCourtTab();
   if (name === 'bench') renderBenchScreen();
   if (S.currentTab !== name) {
     S.currentTab = name;
@@ -5616,6 +5722,17 @@ function init() {
   }
   $('#rotNext')?.addEventListener('click', () => { S.viewRot = ((S.viewRot || 0) + 1) % 6; renderCourtView(); });
   $('#rotPrev')?.addEventListener('click', () => { S.viewRot = ((S.viewRot || 0) + 5) % 6; renderCourtView(); });
+  // Court tab (scratch six)
+  $('#scratchNext')?.addEventListener('click', () => { if (!S.court) S.court = defaultCourt(); S.court.viewRot = ((S.court.viewRot || 0) + 1) % 6; renderCourtView(COURT_CTX); });
+  $('#scratchPrev')?.addEventListener('click', () => { if (!S.court) S.court = defaultCourt(); S.court.viewRot = ((S.court.viewRot || 0) + 5) % 6; renderCourtView(COURT_CTX); });
+  $('#scratchFromLineup')?.addEventListener('click', () => {
+    if (!S.lineup.board) { toast('Build a lineup on the Lineup tab first.', 3000); return; }
+    if (!S.court) S.court = defaultCourt();
+    S.court.startOrder = S.lineup.board.startOrder.slice();
+    save();
+    renderCourtTab();
+    toast('Your Lineup six is on the scratch court.', 2600);
+  });
   $('#generateBtn').addEventListener('click', () => {
     runGenerate({ fresh: true, toastOnSuccess: true });
   });

@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
   <title>Court IQ — Covenant</title>
-  <link rel="stylesheet" href="styles.css?v=2026.09.07-1">
+  <link rel="stylesheet" href="styles.css?v=2026.09.09-1">
 </head>
 <body>
   <header class="topbar">
@@ -64,6 +64,10 @@
       <span class="tab-icon">👥</span>
       <span class="tab-label">Roster</span>
     </button>
+    <button class="tab" data-tab="court" role="tab">
+      <span class="tab-icon">🎯</span>
+      <span class="tab-label">Court</span>
+    </button>
     <button class="tab" data-tab="lineup" role="tab">
       <span class="tab-icon">🏐</span>
       <span class="tab-label">Lineup</span>
@@ -107,6 +111,38 @@
         <p class="hint">Or load a 12-player demo team to try out the lineup builder:</p>
         <button class="btn btn-secondary" id="loadDemoBtn" type="button">Load Demo Roster</button>
       </div>
+    </section>
+
+    <!-- COURT TAB: a scratch six for trying rotations. Same court view as
+         the Lineup tab, drawn through COURT_CTX; never touches the lineup. -->
+    <section class="tab-panel" id="courtTab" role="tabpanel">
+      <div class="scratch-head">
+        <p class="hint">A scratch court for trying rotations. Nothing here changes your Lineup tab.</p>
+        <button class="btn btn-secondary btn-tiny" id="scratchFromLineup" type="button" title="Copy the six from the Lineup tab onto this court">↺ Start from Lineup</button>
+      </div>
+      <div class="lineup-status lineup-status-warn" id="scratchStatus" hidden></div>
+      <section class="court-view" id="scratchView">
+        <div class="court-view-main">
+          <div class="court-view-head">
+            <button class="btn btn-secondary rot-nav" id="scratchPrev" type="button" aria-label="Previous rotation">‹</button>
+            <div class="rot-dots" id="scratchDots" role="tablist" aria-label="Rotation"></div>
+            <button class="btn btn-primary rot-nav" id="scratchNext" type="button">Rotate ➜</button>
+          </div>
+          <div class="big-court" id="scratchCourt"></div>
+          <p class="hint court-hint" id="scratchHint"></p>
+        </div>
+        <aside class="court-view-side">
+          <div class="score-card" id="scratchScore"></div>
+        </aside>
+        <div class="court-view-bench">
+          <div class="bench-card lb-bench" id="scratchBenchCard">
+            <div class="bench-card-head">
+              <h3>Bench <span class="bench-hint">drag onto the court</span></h3>
+            </div>
+            <ul class="bench-list" id="scratchBenchList"></ul>
+          </div>
+        </div>
+      </section>
     </section>
 
     <!-- LINEUP TAB -->
@@ -305,7 +341,7 @@
         </section>
         <section class="guide-card">
           <h3>2 · Get a starting six</h3>
-          <p>On <strong>Lineup</strong>, pick your system (4-2) and tap <strong>Suggest lineup</strong>. That's a suggestion — the court is yours from there.</p>
+          <p>On <strong>Lineup</strong>, pick your system (4-2) and tap <strong>Suggest lineup</strong>. That's a suggestion — the court is yours from there. The <strong>Court</strong> tab is a scratch court for trying rotations without touching this one.</p>
         </section>
         <section class="guide-card">
           <h3>3 · Make it yours</h3>
@@ -467,6 +503,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2026.09.07-1"></script>
+  <script src="app.js?v=2026.09.09-1"></script>
 </body>
 </html>

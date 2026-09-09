@@ -2334,7 +2334,7 @@ body.dragging-court .bench-drop-zone { display: block; }
 
 /* Landscape iPad (10"–13"): wider main, side panels in two columns. */
 @media (min-width: 1024px) and (orientation: landscape) {
-  body[data-tab="lineup"] main, body[data-tab="bench"] main { max-width: 1240px; }
+  body[data-tab="lineup"] main, body[data-tab="bench"] main, body[data-tab="court"] main { max-width: 1240px; }
   #lineupSide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
   #rotationGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .lc-field select, .lineup-controls .btn { min-height: 48px; }
@@ -2494,8 +2494,8 @@ body.dragging-court .bench-drop-zone { display: block; }
 .court-view-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .court-view-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .rot-nav { min-height: 48px; }
-#rotNext { min-width: 130px; font-size: 16px; }
-#rotPrev { min-width: 48px; font-size: 22px; padding: 0; }
+#rotNext, #scratchNext { min-width: 130px; font-size: 16px; }
+#rotPrev, #scratchPrev { min-width: 48px; font-size: 22px; padding: 0; }
 .rot-dots { display: flex; gap: 6px; flex: 1; justify-content: center; }
 .rot-dot {
   width: 36px; height: 36px; border-radius: 50%;
@@ -2576,15 +2576,16 @@ body.dragging-court .bench-drop-zone { display: block; }
   position: absolute;
   right: 8px;
   bottom: 6px;
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 800;
   color: var(--brand-text);
   background: var(--brand-soft);
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
 }
-.big-rot-court .rot-chip { padding-right: 56px; }
+.big-rot-court .rot-chip { padding-right: 12px; }
+.big-rot-court .rot-chip-role { padding-right: 64px; } /* the rating badge sits beside the position line, not the name */
 @media (min-width: 768px) {
   .court-view-side { max-height: calc(100vh - 176px); overflow-y: auto; padding-right: 2px; }
 }
@@ -2724,8 +2725,8 @@ body.touring { overflow-x: hidden; }
   .court-view-head { gap: 6px; }
   .rot-dots { gap: 4px; }
   .rot-dot { width: 30px; height: 30px; font-size: 12px; }
-  #rotNext { min-width: 92px; font-size: 14px; padding: 0 10px; min-height: 44px; }
-  #rotPrev { min-width: 40px; min-height: 44px; }
+  #rotNext, #scratchNext { min-width: 92px; font-size: 14px; padding: 0 10px; min-height: 44px; }
+  #rotPrev, #scratchPrev { min-width: 40px; min-height: 44px; }
   .big-court { padding: 6px; }
   .big-rot-court { gap: 6px; padding: 8px; }
   .big-rot-court .rot-zone { min-height: 100px; padding: 4px; }
@@ -2734,7 +2735,7 @@ body.touring { overflow-x: hidden; }
   .big-rot-court .rot-chip { padding: 6px 6px 20px 8px; }
   .big-rot-court .rot-chip-name { font-size: 14px; white-space: normal; line-height: 1.15; }
   .big-rot-court .rot-chip-role { font-size: 9px; }
-  .rot-chip-avg { font-size: 12px; padding: 1px 6px; right: 5px; bottom: 4px; }
+  .rot-chip-avg { font-size: 14px; padding: 2px 7px; right: 5px; bottom: 4px; }
   .court-hint { font-size: 12px; }
   /* score */
   .score-card { padding: 12px 14px; gap: 10px; }
@@ -2866,3 +2867,9 @@ body.touring { overflow-x: hidden; }
   border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 15px;
 }
 .partner-at-hint { color: var(--text-mute); }
+
+/* ===== Court tab: scratch six ===== */
+.scratch-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.scratch-head .hint { flex: 1 1 240px; }
+#scratchStatus { margin-bottom: 12px; }
+#scratchView { margin-top: 4px; }

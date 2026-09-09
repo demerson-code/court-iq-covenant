@@ -26,6 +26,7 @@ test.beforeEach(async ({ page }) => {
     window.S.lineup.subPatterns = [];
     window.S.lineup.pairings = [];
     window.S.lineup.partners = [];
+    window.S.court = null;
     window.S.lineup.liberoConfig = { playerId: null, covers: [], replaces: ['MB'], servesInRotation: null };
     window.S.lineup.planExclude = {};
     window.S.lineup.board = null;
@@ -887,5 +888,48 @@ test.describe('partners (front row / back row pairs)', () => {
     expect(out.bothNotes[0]).toContain('both are starting');
     expect(out.snapPartners.length).toBe(1);
     expect(out.same).toBe(false);
+  });
+});
+
+test.describe('court tab (scratch six)', () => {
+  test('seeds from the lineup, drags edit only the scratch six, a court-to-bench drop opens the spot', async ({ page }) => {
+    const out = await page.evaluate((roster) => {
+      window.S.players = roster;
+      window.S.settings.system = '4-2';
+      window.S.settings.level = 'ms';
+      window.S.lineup.everybodyPlays = false;
+      window.runGenerate({ fresh: true });
+      const lineupBefore = window.S.lineup.board.startOrder.slice();
+      window.S.court = null;
+      window.setTab('court');                       // seeds the scratch from the lineup and renders it
+      const seeded = window.S.court.startOrder.slice();
+      const chips = document.querySelectorAll('#scratchCourt .rot-chip:not(.rot-chip-empty)').length;
+      const weakDots = document.querySelectorAll('#scratchDots .rot-dot.is-weak').length;
+      const onFloor = new Set(seeded.concat([window.S.lineup.liberoConfig.playerId]));
+      const bench = roster.filter(p => p.available && !onFloor.has(p.id)).map(p => p.id);
+      const slot = window.boardSlot(0, 4);
+      window.scratchDrop({ kind: 'bench', playerId: bench[0], scratch: true }, { kind: 'zone', rotIdx: 0, zone: 4 });
+      const afterIn = window.S.court.startOrder.slice();
+      window.scratchDrop({ kind: 'court', playerId: bench[0], rotIdx: 0, zone: 4, scratch: true }, { kind: 'bench' });
+      const afterOut = window.S.court.startOrder.slice();
+      const emptyChips = document.querySelectorAll('#scratchCourt .rot-chip-empty').length;
+      const score = (document.querySelector('#scratchScore .score-big') || {}).textContent || '';
+      const status = (document.getElementById('scratchStatus') || {}).textContent || '';
+      window.setTab('roster');
+      return {
+        seededFromLineup: seeded.join() === lineupBefore.join(),
+        lineupUnchanged: window.S.lineup.board.startOrder.join() === lineupBefore.join(),
+        chips, weakDots, slot, afterIn, afterOut, emptyChips, score, status, bench0: bench[0]
+      };
+    }, ms12);
+    expect(out.seededFromLineup).toBe(true);
+    expect(out.chips).toBe(6);
+    expect(out.weakDots).toBeGreaterThanOrEqual(1);
+    expect(out.afterIn[out.slot]).toBe(out.bench0);
+    expect(out.afterOut[out.slot]).toBeNull();
+    expect(out.emptyChips).toBe(1);
+    expect(out.status).toContain('empty spot');
+    expect(out.lineupUnchanged).toBe(true);
+    expect(out.score).not.toBe('');
   });
 });
